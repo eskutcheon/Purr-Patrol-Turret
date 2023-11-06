@@ -5,10 +5,5 @@ name = "pip_conf_index_global"
 
 [packages]
 opencv-python = "*"
-adafruit-motorhat = "*"
-"jetson.gpio" = "==2.0.21"
 
 [dev-packages]
-
-[pipenv]
-allow_prereleases = true
