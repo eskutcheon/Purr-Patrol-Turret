@@ -3,8 +3,6 @@ try:
 except Exception as e:
     print("Warning: OpenCV not installed. To use motion detection, make sure you've properly configured OpenCV.")
 import time
-# TODO: replace all usage of this with matplotlib or something
-import imutils
 
 # TODO: gonna need heavy modification for our libraries, use case, and general updates to Python3
 class VideoUtils(object):
@@ -40,15 +38,18 @@ class VideoUtils(object):
         count = 0
         # loop over the frames of the video
         while True:
-            # grab the current frame and initialize the occupied/unoccupied
-            # text
+            # grab the current frame and initialize the occupied/unoccupied text
             (grabbed, frame) = camera.read()
-            # if the frame could not be grabbed, then we have reached the end
-            # of the video
+            # if the frame could not be grabbed, then we have reached the end of the video
             if not grabbed:
                 break
             # resize the frame, convert it to grayscale, and blur it
-            frame = imutils.resize(frame, width=500)
+            # removing dependency on imutils with explicit changes:
+            H, W = frame.shape[:2]
+            # ratio of new width to old width
+            r = 500/float(W)
+            frame = cv2.resize(frame, dsize=(500, int(H*r)), interpolation=cv2.INTER_LINEAR)
+            #frame = imutils.resize(frame, width=500)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             gray = cv2.GaussianBlur(gray, (21, 21), 0)
             # if the first frame is None, initialize it
