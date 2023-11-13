@@ -12,11 +12,15 @@ import contextlib
 from copy import deepcopy
 # TODO: replace this with the Jetson library and track down usage - Adafruit should still be the same since the motor driver is an Adafruit board
     # relevant methods only found in Turret class
-import RPi.GPIO as GPIO
-# This is apparently deprecated:
-from Adafruit_MotorHAT import Adafruit_MotorHAT, Adafruit_DCMotor, Adafruit_StepperMotor
+#import RPi.GPIO as GPIO
+import Jetson.GPIO as GPIO
+#       This is apparently deprecated:
+#       from Adafruit_MotorHAT import Adafruit_MotorHAT, Adafruit_DCMotor, Adafruit_StepperMotor
 # using their recommendation here:
 #https://github.com/adafruit/Adafruit_CircuitPython_MotorKit
+from adafruit_motorkit import MotorKit
+
+
 from config import *
 from motion_tracking import VideoUtils
 
@@ -44,7 +48,8 @@ class Turret(object):
     def __init__(self, friendly_mode=True):
         self.friendly_mode = friendly_mode
         # create a default object, no changes to I2C address or frequency
-        self.mh = Adafruit_MotorHAT()
+        #self.mh = Adafruit_MotorHAT()
+        self.mh = MotorKit()
         atexit.register(self.__turn_off_motors)
         # Stepper motor 1
         self.sm_x = self.mh.getStepper(200, 1)      # 200 steps/rev, motor port #1
@@ -234,7 +239,9 @@ class Turret(object):
         :param steps:
         :return:
         """
-        motor.step(steps, Adafruit_MotorHAT.FORWARD,  Adafruit_MotorHAT.INTERLEAVE)
+        #motor.step(steps, Adafruit_MotorHAT.FORWARD,  Adafruit_MotorHAT.INTERLEAVE)
+        motor.step(steps, MotorKit.FORWARD,  MotorKit.INTERLEAVE)
+        
 
     @staticmethod
     def move_backward(motor, steps):
@@ -244,17 +251,23 @@ class Turret(object):
         :param steps:
         :return:
         """
-        motor.step(steps, Adafruit_MotorHAT.BACKWARD, Adafruit_MotorHAT.INTERLEAVE)
+        #motor.step(steps, Adafruit_MotorHAT.BACKWARD, Adafruit_MotorHAT.INTERLEAVE)
+        motor.step(steps, MotorKit.BACKWARD, MotorKit.INTERLEAVE)
 
     def __turn_off_motors(self):
         """
         Recommended for auto-disabling motors on shutdown!
         :return:
         """
-        self.mh.getMotor(1).run(Adafruit_MotorHAT.RELEASE)
-        self.mh.getMotor(2).run(Adafruit_MotorHAT.RELEASE)
-        self.mh.getMotor(3).run(Adafruit_MotorHAT.RELEASE)
-        self.mh.getMotor(4).run(Adafruit_MotorHAT.RELEASE)
+        #self.mh.getMotor(1).run(Adafruit_MotorHAT.RELEASE)
+        #self.mh.getMotor(2).run(Adafruit_MotorHAT.RELEASE)
+        #self.mh.getMotor(3).run(Adafruit_MotorHAT.RELEASE)
+        #self.mh.getMotor(4).run(Adafruit_MotorHAT.RELEASE)
+
+        self.mh.getMotor(1).run(MotorKit.RELEASE)
+        self.mh.getMotor(2).run(MotorKit.RELEASE)
+        self.mh.getMotor(3).run(MotorKit.RELEASE)
+        self.mh.getMotor(4).run(MotorKit.RELEASE)
 
 if __name__ == "__main__":
     t = Turret(friendly_mode=False)
