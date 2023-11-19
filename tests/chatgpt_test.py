@@ -11,7 +11,7 @@ motor_shield = I2C.Device(MOTOR_SHIELD_I2C_ADDR, 1)
 def set_motor_speed(speed):
     # You'll need to refer to the motor shield documentation for the correct command format
     # Here's an example placeholder for sending a speed command
-    motor_shield.write8(register, speed)
+    motor_shield.write8(0x80, speed)
 
 # Function to run the motor for a given duration
 def run_motor(duration):
