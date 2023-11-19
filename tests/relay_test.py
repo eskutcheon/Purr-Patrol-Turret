@@ -2,7 +2,7 @@ import Jetson.GPIO as GPIO
 import time
 
 # Define the pin number where the relay is connected
-RELAY_PIN = 7  # Change this to the pin you are using
+RELAY_PIN = 10  # Change this to the pin you are using
 
 def main():
     # Pin Setup:
