@@ -18,10 +18,12 @@ class VideoUtils(object):
         """
         video_capture = cv2.VideoCapture(camera_port)
         while True:
+            # TODO: probably want to add some time.sleep(n) statements here to take a frame every `n` seconds
             # Capture frame-by-frame
             ret, frame = video_capture.read()
             # Display the resulting frame
             cv2.imshow('Video', frame)
+            # TODO: figure out what this does and decide if we want to keep it this way
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
         # When everything is done, release the capture
@@ -43,6 +45,9 @@ class VideoUtils(object):
             # if the frame could not be grabbed, then we have reached the end of the video
             if not grabbed:
                 break
+            # TODO: may want to move most of code below to pytorch to do more on CUDA - almost definitely the transforms at least
+                # will depend on whether all this is implemented somewhere since openCV has some unique functions
+            ###############################################################################################################
             # resize the frame, convert it to grayscale, and blur it
             # removing dependency on imutils with explicit changes:
             H, W = frame.shape[:2]
@@ -72,20 +77,20 @@ class VideoUtils(object):
                     else:
                         count += 1
                         continue
-            # compute the absolute difference between the current frame and
-            # first frame
+            # compute the absolute difference between the current frame and first frame
             frameDelta = cv2.absdiff(firstFrame, gray)
             thresh = cv2.threshold(frameDelta, 25, 255, cv2.THRESH_BINARY)[1]
-            # dilate the thresholded image to fill in holes, then find contours
-            # on thresholded image
+            # dilate the thresholded image to fill in holes, then find contours on thresholded image
             thresh = cv2.dilate(thresh, None, iterations=2)
             c = VideoUtils.get_best_contour(thresh.copy(), 5000)
+            # TODO: may create a new utils file and add my draw_bounding box functions to replace this
             if c is not None:
-                # compute the bounding box for the contour, draw it on the frame,
-                # and update the text
+                # compute the bounding box for the contour, draw it on the frame, and update the text
                 (x, y, w, h) = cv2.boundingRect(c)
                 cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
                 callback(c, frame)
+            # TODO: end stuff to edit to pytorch
+            #######################################################################################################################
             # show the frame and record if the user presses a key
             if show_video:
                 cv2.imshow("Security Feed", frame)

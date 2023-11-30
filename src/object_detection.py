@@ -13,6 +13,7 @@ class Detector(object):
         # TODO: need to figure out how to restrict output classes to just the ones we care about - should reduce computation time
         self.classes = weights.meta["categories"]
         self.animal_labels = {'cat': self.classes.index('cat'), 'dog': self.classes.index('dog')}
+        # TODO: may extend this and do some more training on a plant dataset if time permits
         self.plant_labels = {'plant': self.classes.index('potted plant')}
         print(self.classes)
         # TODO: still probably need to specify weights_backbone, num_classes, and norm_layer
@@ -51,8 +52,10 @@ def view_boxes(img, box_coords):
 
 
 def get_significant_boxes(results):
+    # TODO: need to add some checks elsewhere to ensure the highest categories the detector finds are among the class labels in Detector
     bbox_dict = {'boxes': [], 'labels': []}
     for idx, score in enumerate(results['scores']):
+        # they're sorted by default so this logic should be fine
         if score < 0.5:
             break
         bbox_dict['boxes'].append(results['boxes'][idx])
@@ -73,7 +76,8 @@ if __name__ == "__main__":
         print(f"{key}:\n{vals}")
     print(results['boxes'][0])
     # TODO: need criteria for selecting bounding boxes - selecting a variable number of those with scores > threshold (like 0.5) may be good enough
-    boxes = torch.zeros((2,4), dtype=torch.int)
-    boxes[0] = results['boxes'][0].to(dtype=torch.int)
-    boxes[1] = results['boxes'][1].to(dtype=torch.int)
+    boxes = torch.zeros((2,4))      #, dtype=torch.int)
+    boxes[0] = results['boxes'][0]  #.to(dtype=torch.int)
+    boxes[1] = results['boxes'][1]  #.to(dtype=torch.int)
     view_boxes(test_img, boxes)
+    # TODO: after getting relevant boxes from get_significant boxes, return the boxes (in the relevant order - write those down later - think it's [xmin, ymin, xmax, ymax])
