@@ -20,7 +20,6 @@ import Jetson.GPIO as GPIO
 #https://github.com/adafruit/Adafruit_CircuitPython_MotorKit
 from adafruit_motorkit import MotorKit
 
-
 from config import *
 from motion_tracking import VideoUtils
 
