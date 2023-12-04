@@ -3,6 +3,8 @@ try:
 except Exception as e:
     print("Warning: OpenCV not installed. To use motion detection, make sure you've properly configured OpenCV.")
 import time
+import torch
+import torch.nn.functional as F
 
 # TODO: gonna need heavy modification for our libraries, use case, and general updates to Python3
 class VideoUtils(object):
@@ -20,12 +22,13 @@ class VideoUtils(object):
         while True:
             # TODO: probably want to add some time.sleep(n) statements here to take a frame every `n` seconds
             # Capture frame-by-frame
+            time.sleep(0.13) #sleeping for 130 milliseconds, checking roughly every 4 frames. 
             ret, frame = video_capture.read()
             # Display the resulting frame
             cv2.imshow('Video', frame)
             # TODO: figure out what this does and decide if we want to keep it this way
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            if cv2.waitKey(1) & 0xFF == ord('q'): #checking for a q key press every millisecond to break the video loop.
+                break 
         # When everything is done, release the capture
         video_capture.release()
         cv2.destroyAllWindows()
