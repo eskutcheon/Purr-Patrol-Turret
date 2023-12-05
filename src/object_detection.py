@@ -1,6 +1,10 @@
 import torch
-import torchvision.models as Models
-import torchvision.utils as Utils
+import torchvision as TV
+import numpy as np
+import utils # utils.py in this project
+import os
+from pprint import pprint
+from typing import Union, List, Dict, Callable
 
 
 
@@ -8,16 +12,21 @@ class Detector(object):
     def __init__(self):
         # https://pytorch.org/vision/stable/models/generated/torchvision.models.detection.ssdlite320_mobilenet_v3_large.html
         # DEFAULT weights are SSDLite320_MobileNet_V3_Large_Weights.COCO_V1 with 91 classes and 3440060 params
-        weights = Models.detection.SSDLite320_MobileNet_V3_Large_Weights.DEFAULT
+        weights = TV.models.detection.SSDLite320_MobileNet_V3_Large_Weights.DEFAULT
         # view categories where each index corresponds to the class labels returned by the model
-        # TODO: need to figure out how to restrict output classes to just the ones we care about - should reduce computation time
+        # TODO: need to figure out how to restrict output classes to just the ones we care about within the model
         self.classes = weights.meta["categories"]
-        self.animal_labels = {'cat': self.classes.index('cat'), 'dog': self.classes.index('dog')}
+        self.class_labels = {self.classes.index('cat'): 'cat',
+                            self.classes.index('dog'): 'dog',
+                            self.classes.index('potted plant'): 'plant'}
+        #self.animal_labels = {self.classes.index('cat'): 'cat', self.classes.index('dog'): 'dog'}
         # TODO: may extend this and do some more training on a plant dataset if time permits
-        self.plant_labels = {'plant': self.classes.index('potted plant')}
+        #self.plant_labels = {self.classes.index('potted plant'): 'plant'}
         print(self.classes)
+        self.overlap_threshold = 0.2
+        self.score_threshold = 0.25
         # TODO: still probably need to specify weights_backbone, num_classes, and norm_layer
-        self.model = Models.detection.ssdlite320_mobilenet_v3_large(weights=weights)
+        self.model = TV.models.detection.ssdlite320_mobilenet_v3_large(weights=weights)
         self.model.eval()
         # still have to test the outputs of this model's forward method
 
@@ -31,9 +40,28 @@ class Detector(object):
         # inputs are expected to be normalized float tensors
         input_img = img.to(dtype=torch.float32)/255
         # forward method expects a list of torch.Tensor objects with shape (3,H,W)
-        return self.model([input_img])
+        results = self.model([input_img])[0]
+        return self.filter_results(results)
 
-    def get_overlap(self, results):
+    def filter_results(self, results):
+        # TODO: move to using Non-Maximum Suppression: https://machinelearningspace.com/non-maximum-suppression-in-pytorch-how-to-select-the-correct-bounding-box/
+        # essentially have most of this but need to account for multiple instances by IOU scores
+        results_pruned = {key: [] for key in results.keys()}
+        for i in range(len(results["labels"])):
+            label = int(results["labels"][i])
+            if results["scores"][i] < self.score_threshold:
+                break
+            if label in self.class_labels.keys():
+                results_pruned["boxes"].append(results["boxes"][i])
+                results_pruned["labels"].append(self.class_labels[label])
+        return results_pruned
+
+    def get_overlap(self, animal_boxes: torch.Tensor, plant_boxes: torch.Tensor):
+        # pretty sure this can take batch tensors just fine, so may just do that
+        # bounding box order MUST be (xmin, ymin, xmax, ymax)
+        iou = TV.ops(animal_boxes, plant_boxes, reduction="sum")
+        if iou > self.overlap_threshold:
+            pass
         # pass whatever results with class bounding boxes to this to get the percent overlap of cat and plant boxes
         # maybe return the center of the cat bounding box if overlap > threshold in pixel coordinates
         # pass this center to a filter that corrects for the offset between the camera and the sprayer tip
@@ -42,42 +70,29 @@ class Detector(object):
                 # just assume the camera is always at the same angle and maybe physically mark the default angle on the camera mount
         pass
 
-
-def view_boxes(img, box_coords):
-    import matplotlib.pyplot as plt
-    img_marked = Utils.draw_bounding_boxes(img, box_coords, labels=['cat', 'plant'], colors=['yellow', 'green'])
-    img_marked = img_marked.numpy().transpose([1,2,0]) # ndarray objects expect the channel dim to be the last one
-    plt.imshow(img_marked)
-    plt.show()
+        @utils.enforce_type(torch.Tensor)
+        def scan_frame(self, capture):
+            # NOTE: may need more preprocessing done here, e.g., grayscale to ensure lower computation time from the model
+            results = self.detect(capture)
 
 
-def get_significant_boxes(results):
-    # TODO: need to add some checks elsewhere to ensure the highest categories the detector finds are among the class labels in Detector
-    bbox_dict = {'boxes': [], 'labels': []}
-    for idx, score in enumerate(results['scores']):
-        # they're sorted by default so this logic should be fine
-        if score < 0.5:
-            break
-        bbox_dict['boxes'].append(results['boxes'][idx])
-        bbox_dict['labels'].append(results['labels'][idx])
-    return bbox_dict
+''' general pipeline order:
+    motion_tracking watches for its trigger, then an image is passed as a torch.Tensor or np.ndarray to a scan_frame method of its Detector class member
+        add check for image array type later
+    scan_frame -> detect -> filter_boxes -> get_overlap -> ?
+        need to also get the centroid of the bounding box intersection to return the (unprocessed) coordinate to the target to motion_tracking
+            probably just return None if the bounding box overlap isn't high enough to trigger things
+'''
 
 
 # using this just for testing for now
 if __name__ == "__main__":
-    import os
-    from pprint import pprint
-    import torchvision.io as IO
-    test_img = IO.read_image(os.path.join("tests", "catonaplant.png"), IO.ImageReadMode.RGB) # read as uint8 tensor of shape (3,H,W)
+    test_img = TV.io.read_image(os.path.join("tests", "catonaplant.png"), TV.io.ImageReadMode.RGB) # read as uint8 tensor of shape (3,H,W)
     print(f"test_img shape: {test_img.shape}")
     detector = Detector()
-    results = detector.detect(test_img)[0]
+    results = detector.detect(test_img)
     for key, vals in results.items():
+        # should return boxes (2D float16 Tensor of shape (N,4)), scores (1D float16 Tensor of size N), labels (1D int Tensor of size N)
         print(f"{key}:\n{vals}")
-    print(results['boxes'][0])
-    # TODO: need criteria for selecting bounding boxes - selecting a variable number of those with scores > threshold (like 0.5) may be good enough
-    boxes = torch.zeros((2,4))      #, dtype=torch.int)
-    boxes[0] = results['boxes'][0]  #.to(dtype=torch.int)
-    boxes[1] = results['boxes'][1]  #.to(dtype=torch.int)
-    view_boxes(test_img, boxes)
-    # TODO: after getting relevant boxes from get_significant boxes, return the boxes (in the relevant order - write those down later - think it's [xmin, ymin, xmax, ymax])
+    boxes = torch.stack(results["boxes"])
+    utils.view_boxes(test_img, boxes, results["labels"])

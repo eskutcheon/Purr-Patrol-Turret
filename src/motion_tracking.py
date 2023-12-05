@@ -22,18 +22,19 @@ class VideoUtils(object):
         while True:
             # TODO: probably want to add some time.sleep(n) statements here to take a frame every `n` seconds
             # Capture frame-by-frame
-            time.sleep(0.13) #sleeping for 130 milliseconds, checking roughly every 4 frames. 
+            # NOTE: probably want a bigger delay like every 30 frames, assuming 30 fps - will depend on speed of object detection
+            time.sleep(0.13) #sleeping for 130 milliseconds, checking roughly every 4 frames.
             ret, frame = video_capture.read()
             # Display the resulting frame
             cv2.imshow('Video', frame)
-            # TODO: figure out what this does and decide if we want to keep it this way
             if cv2.waitKey(1) & 0xFF == ord('q'): #checking for a q key press every millisecond to break the video loop.
-                break 
+                break
         # When everything is done, release the capture
         video_capture.release()
         cv2.destroyAllWindows()
 
     @staticmethod
+    # TODO: decompose this into more functions for better flexibility
     def find_motion(callback, camera_port=0, show_video=False):
         camera = cv2.VideoCapture(camera_port)
         time.sleep(0.25)
