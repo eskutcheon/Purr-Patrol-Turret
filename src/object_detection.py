@@ -22,9 +22,10 @@ class Detector(object):
         #self.animal_labels = {self.classes.index('cat'): 'cat', self.classes.index('dog'): 'dog'}
         # TODO: may extend this and do some more training on a plant dataset if time permits
         #self.plant_labels = {self.classes.index('potted plant'): 'plant'}
-        print(self.classes)
+        #print(self.classes)
         self.overlap_threshold = 0.2
-        self.score_threshold = 0.25
+        # NOTE: seems that some images may give very low confidence scores so constants may be a problem
+        self.score_threshold = 0.2
         # TODO: still probably need to specify weights_backbone, num_classes, and norm_layer
         self.model = TV.models.detection.ssdlite320_mobilenet_v3_large(weights=weights)
         self.model.eval()
@@ -41,6 +42,9 @@ class Detector(object):
         input_img = img.to(dtype=torch.float32)/255
         # forward method expects a list of torch.Tensor objects with shape (3,H,W)
         results = self.model([input_img])[0]
+        for key, vals in results.items():
+            # should return boxes (2D float16 Tensor of shape (N,4)), scores (1D float16 Tensor of size N), labels (1D int Tensor of size N)
+            print(f"{key}:\n{vals}")
         return self.filter_results(results)
 
     def filter_results(self, results):
@@ -87,12 +91,16 @@ class Detector(object):
 
 # using this just for testing for now
 if __name__ == "__main__":
-    test_img = TV.io.read_image(os.path.join("tests", "catonaplant.png"), TV.io.ImageReadMode.RGB) # read as uint8 tensor of shape (3,H,W)
-    print(f"test_img shape: {test_img.shape}")
-    detector = Detector()
-    results = detector.detect(test_img)
-    for key, vals in results.items():
-        # should return boxes (2D float16 Tensor of shape (N,4)), scores (1D float16 Tensor of size N), labels (1D int Tensor of size N)
-        print(f"{key}:\n{vals}")
-    boxes = torch.stack(results["boxes"])
-    utils.view_boxes(test_img, boxes, results["labels"])
+    all_test_images = os.listdir("test_images")
+    if not os.path.exists("results"):
+        os.makedirs("results")
+    for test in all_test_images:
+        test_img = TV.io.read_image(os.path.join("test_images", test), TV.io.ImageReadMode.RGB) # read as uint8 tensor of shape (3,H,W)
+        #print(f"test_img shape: {test_img.shape}")
+        detector = Detector()
+        results = detector.detect(test_img)
+        # FIXME: add check for when this list is empty
+        boxes = torch.stack(results["boxes"])
+        new_filename = f"{os.path.splitext(test)[0]}_t{detector.score_threshold}.png"
+        output_path = os.path.join("results", new_filename)
+        utils.view_boxes(test_img, boxes, results["labels"], output_path)
