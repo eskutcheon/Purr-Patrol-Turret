@@ -2,7 +2,7 @@ import torch
 import torchvision as TV
 import numpy as np
 import utils # utils.py in this project
-import os
+import os, sys
 from pprint import pprint
 from typing import Union, List, Dict, Callable
 
@@ -19,13 +19,15 @@ class Detector(object):
         self.class_labels = {self.classes.index('cat'): 'cat',
                             self.classes.index('dog'): 'dog',
                             self.classes.index('potted plant'): 'plant'}
+        # should be faster than doing this on the fly
+        self.class_int_labels = torch.Tensor(list(self.class_labels.keys()))
         #self.animal_labels = {self.classes.index('cat'): 'cat', self.classes.index('dog'): 'dog'}
         # TODO: may extend this and do some more training on a plant dataset if time permits
         #self.plant_labels = {self.classes.index('potted plant'): 'plant'}
         #print(self.classes)
         self.overlap_threshold = 0.2
         # NOTE: seems that some images may give very low confidence scores so constants may be a problem
-        self.score_threshold = 0.2
+        self.score_threshold = 0.1
         # TODO: still probably need to specify weights_backbone, num_classes, and norm_layer
         self.model = TV.models.detection.ssdlite320_mobilenet_v3_large(weights=weights)
         self.model.eval()
@@ -41,24 +43,32 @@ class Detector(object):
         # inputs are expected to be normalized float tensors
         input_img = img.to(dtype=torch.float32)/255
         # forward method expects a list of torch.Tensor objects with shape (3,H,W)
-        results = self.model([input_img])[0]
-        for key, vals in results.items():
-            # should return boxes (2D float16 Tensor of shape (N,4)), scores (1D float16 Tensor of size N), labels (1D int Tensor of size N)
-            print(f"{key}:\n{vals}")
-        return self.filter_results(results)
+        with torch.no_grad():
+            results = self.model([input_img])[0]
+            '''for key, vals in results.items():
+                # should return boxes (2D float16 Tensor of shape (N,4)), scores (1D float16 Tensor of size N), labels (1D int Tensor of size N)
+                print(f"{key}:\n{vals}")'''
+            return self.filter_results(results)
+
 
     def filter_results(self, results):
-        # TODO: move to using Non-Maximum Suppression: https://machinelearningspace.com/non-maximum-suppression-in-pytorch-how-to-select-the-correct-bounding-box/
-        # essentially have most of this but need to account for multiple instances by IOU scores
-        results_pruned = {key: [] for key in results.keys()}
-        for i in range(len(results["labels"])):
-            label = int(results["labels"][i])
-            if results["scores"][i] < self.score_threshold:
-                break
-            if label in self.class_labels.keys():
-                results_pruned["boxes"].append(results["boxes"][i])
-                results_pruned["labels"].append(self.class_labels[label])
-        return results_pruned
+        indices = torch.where(results["scores"] > self.score_threshold)
+        results_pruned = {key: val[indices] for key, val in results.items()}
+        all_boxes = []
+        all_labels = []
+        unique_labels = torch.unique(results_pruned["labels"])
+        valid_indices = torch.isin(unique_labels, self.class_int_labels)
+        for label in unique_labels[valid_indices]:
+            label_indices = torch.where(results_pruned["labels"] == label)[0]
+            label_boxes = results_pruned["boxes"][label_indices]
+            label_scores = results_pruned["scores"][label_indices]
+            # non-maximum suppression to prune less confident results
+            nms_indices = TV.ops.nms(label_boxes, label_scores, iou_threshold=0.2)
+            # save results to a new dictionary
+            all_boxes.append(label_boxes[nms_indices])
+            all_labels.extend([int(label.item()) for _ in range(len(nms_indices))])
+        return {"boxes": torch.cat(all_boxes, dim=0), "labels": all_labels}
+
 
     def get_overlap(self, animal_boxes: torch.Tensor, plant_boxes: torch.Tensor):
         # pretty sure this can take batch tensors just fine, so may just do that
@@ -99,8 +109,9 @@ if __name__ == "__main__":
         #print(f"test_img shape: {test_img.shape}")
         detector = Detector()
         results = detector.detect(test_img)
-        # FIXME: add check for when this list is empty
-        boxes = torch.stack(results["boxes"])
+        print(results)
+        # FIXME: add check for when results["boxes"] is empty
         new_filename = f"{os.path.splitext(test)[0]}_t{detector.score_threshold}.png"
         output_path = os.path.join("results", new_filename)
-        utils.view_boxes(test_img, boxes, results["labels"], output_path)
+        box_labels = [detector.class_labels[label] for label in results["labels"]]
+        utils.view_boxes(test_img, results["boxes"], box_labels, output_path)
