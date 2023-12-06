@@ -6,13 +6,23 @@ from typing import Union, List, Dict, Callable
 
 
 
-def view_boxes(img, box_coords, labels, dest_path):
+def view_boxes(img, box_coords, labels, target=None, dest_path=None):
     # TODO: need to update this to take an arbitrary number of box_coords, reference labels from a global dictionary, and pick colors randomly
-    img_marked = TV.utils.draw_bounding_boxes(img, box_coords, labels=labels) #, colors=['red', 'green'])
+    img_marked = TV.utils.draw_bounding_boxes(img, box_coords, labels=labels, width=2) #, colors=['red', 'green'])
     img_marked = img_marked.numpy().transpose([1,2,0]) # ndarray objects expect the channel dim to be the last one
-    plt.imshow(img_marked)
+    fig, ax = plt.subplots()
+    ax.imshow(img_marked)
+    # Remove axes and whitespace
+    ax.axis('off')  # Turns off axes
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)  # Removes whitespace
+    #plt.imshow(img_marked)
+    if target is not None:
+        ax.scatter([target[0]], [target[1]], color="red", marker="x", s=100)
+    if dest_path is not None:
+        plt.savefig(dest_path, bbox_inches="tight", pad_inches=0)
+        plt.close(fig)
     plt.show()
-    plt.imsave(dest_path, img_marked)
+
 
 # borrowed all the image utility functions from my other projects
 
