@@ -85,10 +85,11 @@ class Detector(object):
                 ani_box = detections["boxes"][animal_idx].unsqueeze(0)
                 plant_box = detections["boxes"][plant_idx].unsqueeze(0)
                 iou = TV.ops.box_iou(ani_box, plant_box)
+                # return the first big overlap it finds
                 if float(iou) > self.overlap_threshold:
                     center = [int((ani_box[0,0] + ani_box[0,2])//2), int((ani_box[0,1] + ani_box[0,3])//2)]
                     return True, center
-        return False, [0,0]
+        return False, [0,0] # maybe make this none?
         # pass whatever results with class bounding boxes to this to get the percent overlap of cat and plant boxes
         # maybe return the center of the cat bounding box if overlap > threshold in pixel coordinates
         # pass this center to a filter that corrects for the offset between the camera and the sprayer tip
