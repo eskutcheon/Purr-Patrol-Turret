@@ -19,6 +19,7 @@ class Detector(object):
         self.class_labels = {self.classes.index('cat'): 'cat',
                             self.classes.index('dog'): 'dog',
                             self.classes.index('potted plant'): 'plant'}
+        # TODO: replace the above with self.class_labels = {**self.animal_labels, **self.plant_labels}
         # NOTE: may actually want to add the vase class to this list since it keeps detecting the plant pots as one
         # should be faster than doing this on the fly
         self.class_int_labels = torch.Tensor(list(self.class_labels.keys()))
@@ -42,12 +43,13 @@ class Detector(object):
             recipe: https://github.com/pytorch/vision/tree/main/references/detection#ssdlite320-mobilenetv3-large
         '''
         # inputs are expected to be normalized float tensors
+        # TODO: if adding any preprocessing, add it here
         input_img = img.to(dtype=torch.float32)/255
         # forward method expects a list of torch.Tensor objects with shape (3,H,W)
         with torch.no_grad():
             results = self.model([input_img])[0]
             '''for key, vals in results.items():
-                # should return boxes (2D float16 Tensor of shape (N,4)), scores (1D float16 Tensor of size N), labels (1D int Tensor of size N)
+                # results should be a dict of boxes (2D float16 Tensor of shape (N,4)), scores (1D float16 Tensor of size N), labels (1D int Tensor of size N)
                 print(f"{key}:\n{vals}")'''
             return self.filter_results(results)
 

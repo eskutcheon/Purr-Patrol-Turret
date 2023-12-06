@@ -24,7 +24,7 @@ class VideoUtils(object):
             # TODO: probably want to add some time.sleep(n) statements here to take a frame every `n` seconds
             # Capture frame-by-frame
             # NOTE: probably want a bigger delay like every 30 frames, assuming 30 fps - will depend on speed of object detection
-            time.sleep(0.13) #sleeping for 130 milliseconds, checking roughly every 4 frames.
+            time.sleep(0.333) #sleeping for 333 milliseconds, checking roughly every 10 frames.
             ret, frame = video_capture.read()
             # Display the resulting frame
             cv2.imshow('Video', frame)

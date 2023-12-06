@@ -131,23 +131,17 @@ class Turret(object):
     def __move_axis(self, contour, frame):
         (v_h, v_w) = frame.shape[:2]
         (x, y, w, h) = cv2.boundingRect(contour)
-        
         target_steps_x = (2 * MAX_STEPS_X * (x + w / 2) / v_w) - MAX_STEPS_X
         target_steps_y = (2 * MAX_STEPS_Y * (y + h / 2) / v_h) - MAX_STEPS_Y
-        
         print("x: %s, y: %s" % (str(target_steps_x), str(target_steps_y)))
         print("current x: %s, current y: %s" % (str(self.current_x_steps), str(self.current_y_steps)))
-        
         t_x = self.__move_motor(self.current_x_steps, target_steps_x, self.sm_x, MOTOR_X_REVERSED)
         t_y = self.__move_motor(self.current_y_steps, target_steps_y, self.sm_y, MOTOR_Y_REVERSED)
-        
         t_fire = threading.Thread(target=Turret.fire) if self.__should_fire(target_steps_x, target_steps_y) else None
-        
         t_x.start()
         t_y.start()
         if t_fire:
             t_fire.start()
-        
         t_x.join()
         t_y.join()
         if t_fire:
@@ -161,8 +155,8 @@ class Turret(object):
         return threading.Thread()  # Returns a dummy thread if no movement is needed
 
     def __should_fire(self, target_steps_x, target_steps_y):
-        return (not self.friendly_mode and 
-                abs(target_steps_x - self.current_x_steps) <= 2 and 
+        return (not self.friendly_mode and
+                abs(target_steps_x - self.current_x_steps) <= 2 and
             abs(target_steps_y - self.current_y_steps) <= 2)
 
 
