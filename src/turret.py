@@ -40,6 +40,9 @@ def raw_mode(file):
         termios.tcsetattr(file.fileno(), termios.TCSADRAIN, old_attrs)
 
 
+class Targeting(object):
+    pass
+
 class Turret(object):
     """
     Class used for turret control.

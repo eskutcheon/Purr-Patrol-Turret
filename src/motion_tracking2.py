@@ -4,8 +4,10 @@ except Exception as e:
     print("Warning: OpenCV not installed. To use motion detection, make sure you've properly configured OpenCV.")
 import time
 import torch
+import numpy as np
 import torchvision.transforms as TT
 import torch.nn.functional as F
+import utils
 
 class ToCuda(object):
     def __call__(self, pic):
@@ -20,8 +22,6 @@ class ToCuda(object):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
 
-
-# TODO: gonna need heavy modification for our libraries, use case, and general updates to Python3
 class VideoUtils(object):
     def __init__(self, camera_port):
         self.get_grayscale_tensor = TT.Compose([
@@ -75,8 +75,32 @@ class VideoUtils(object):
     def apply_threshold(frame, threshold_value):
         return (frame > threshold_value/255).type(torch.float)
 
+    @staticmethod
+    def dilate_tensor(tensor, kernel_size=3, num_iter=2):
+        # Create a dilation kernel
+        kernel = torch.ones((1, 1, kernel_size, kernel_size), device=tensor.device)
+        tensor = tensor.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
+        # Apply dilation
+        for _ in range(num_iter):
+            tensor = F.conv2d(tensor, kernel, padding=kernel_size//2)
+        return tensor.squeeze(0).squeeze(0)  # Remove batch and channel dimensions
+
+    @staticmethod
+    def get_best_contour(mask, threshold):
+        # Convert tensor to numpy array and back to uint8
+        mask_np = mask.cpu().numpy().astype(np.uint8)
+        contours, _ = cv2.findContours(mask_np, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        best_area = threshold
+        best_cnt = None
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area > best_area:
+                best_area = area
+                best_cnt = cnt
+        return best_cnt
+
     # TODO: decompose this into more functions for better flexibility
-    def find_motion(self, callback, camera_port=0, show_video=False):
+    def find_motion(self, callback, show_video=False):
         time.sleep(0.25)
         # loop over the frames of the video
         while True:
