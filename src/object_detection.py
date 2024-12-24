@@ -1,12 +1,29 @@
+import os, sys
+from dataclasses import dataclass
+from pprint import pprint
+from typing import Union, List, Dict, Callable, Tuple
 import torch
 import torchvision as TV
 import numpy as np
 import utils # utils.py in this project
-import os, sys
-from pprint import pprint
-from typing import Union, List, Dict, Callable
 
 
+
+@dataclass
+class DetectionResults:
+    boxes: torch.Tensor
+    labels: torch.Tensor
+    is_animal: torch.Tensor
+    # may or may not be needed
+    scores: torch.Tensor = None
+
+def process_detection_lists(boxes_list: List[torch.Tensor], labels_list: List[int], is_animal_list: List[bool]) -> DetectionResults:
+    """ Helper function to convert lists into a single DetectionResults instance """
+    return DetectionResults(
+        boxes=torch.cat(boxes_list, dim=0),
+        labels=torch.tensor(labels_list),
+        is_animal=torch.tensor(is_animal_list, dtype=torch.bool)
+    )
 
 class Detector(object):
     def __init__(self):
@@ -19,7 +36,7 @@ class Detector(object):
         self.class_labels = {self.classes.index('cat'): 'cat',
                             self.classes.index('dog'): 'dog',
                             self.classes.index('potted plant'): 'plant'}
-        # TODO: replace the above with self.class_labels = {**self.animal_labels, **self.plant_labels}
+        # TODO: replace the above with self.class_labels = {**self.animal_labels, **self.plant_labels} eventually
         # NOTE: may actually want to add the vase class to this list since it keeps detecting the plant pots as one
         # should be faster than doing this on the fly
         self.class_int_labels = torch.Tensor(list(self.class_labels.keys()))
@@ -44,7 +61,7 @@ class Detector(object):
         '''
         # inputs are expected to be normalized float tensors
         # TODO: if adding any preprocessing, add it here
-        input_img = img.to(dtype=torch.float32)/255
+        input_img = utils.get_normalized_image(img)
         # forward method expects a list of torch.Tensor objects with shape (3,H,W)
         with torch.no_grad():
             results = self.model([input_img])[0]
@@ -74,22 +91,22 @@ class Detector(object):
             all_labels.extend([int(label.item()) for _ in range(len(nms_indices))])
             # check over each new label to see if it's an animal
             is_animal.extend([label.item() in self.animal_labels.keys() for _ in range(len(nms_indices))])
-        return {"boxes": torch.round(torch.cat(all_boxes, dim=0)),
-                "labels": torch.tensor(all_labels),
-                "is_animal": torch.tensor(is_animal)}
+        return process_detection_lists(all_boxes, all_labels, is_animal)
 
 
-    def get_overlap(self, detections: dict):
-        plant_indices = torch.where(~detections["is_animal"])[0]
-        for animal_idx in torch.where(detections["is_animal"])[0]:
+    def get_overlap(self, detections: DetectionResults) -> Tuple[bool, List[int]]:
+        plant_indices = torch.where(~detections.is_animal)[0]
+        for animal_idx in torch.where(detections.is_animal)[0]:
             for plant_idx in plant_indices:
                 # bounding box order MUST be (xmin, ymin, xmax, ymax)
-                ani_box = detections["boxes"][animal_idx].unsqueeze(0)
-                plant_box = detections["boxes"][plant_idx].unsqueeze(0)
+                ani_box = detections.boxes[animal_idx].unsqueeze(0)
+                plant_box = detections.boxes[plant_idx].unsqueeze(0)
                 iou = TV.ops.box_iou(ani_box, plant_box)
                 # return the first big overlap it finds
                 if float(iou) > self.overlap_threshold:
-                    center = [int((ani_box[0,0] + ani_box[0,2])//2), int((ani_box[0,1] + ani_box[0,3])//2)]
+                    center = [
+                        int((ani_box[0,0] + ani_box[0,2])//2),
+                        int((ani_box[0,1] + ani_box[0,3])//2)]
                     return True, center
         return False, [0,0] # maybe make this none?
         # pass whatever results with class bounding boxes to this to get the percent overlap of cat and plant boxes
@@ -102,11 +119,10 @@ class Detector(object):
     @utils.enforce_type("tensor")
     def scan_frame(self, capture):
         # NOTE: may need more preprocessing done here, e.g., grayscale to ensure lower computation time from the model
-        detected_dict = self.detect(capture)
-        shoot_flag, target_coord = self.get_overlap(detected_dict)
+        detected_results = self.detect(capture)
+        shoot_flag, target_coord = self.get_overlap(detected_results)
         return shoot_flag, target_coord
-        #print(shoot_flag)
-        #print(target_coord)
+
 
 
 ''' general pipeline order:

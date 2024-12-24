@@ -8,7 +8,7 @@ import torchvision.transforms as TT
 import torch.nn.functional as F
 
 # TODO: gonna need heavy modification for our libraries, use case, and general updates to Python3
-class VideoUtils(object):
+class MotionTracker(object):
     """
     Helper functions for video utilities.
     """
@@ -87,7 +87,7 @@ class VideoUtils(object):
             thresh = cv2.threshold(frameDelta, 25, 255, cv2.THRESH_BINARY)[1]
             # dilate the thresholded image to fill in holes, then find contours on thresholded image
             thresh = cv2.dilate(thresh, None, iterations=2)
-            c = VideoUtils.get_best_contour(thresh.copy(), 5000)
+            c = MotionTracker.get_best_contour(thresh.copy(), 5000)
             # TODO: may create a new utils file and add my draw_bounding box functions to replace this
             if c is not None:
                 # compute the bounding box for the contour, draw it on the frame, and update the text

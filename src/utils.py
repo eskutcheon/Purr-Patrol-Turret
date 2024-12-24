@@ -5,6 +5,12 @@ import torchvision as TV
 from typing import Union, List, Dict, Callable
 
 
+def get_user_confirmation(prompt):
+    answers = {'y': True, 'n': False}
+    # ! WARNING: only works in Python 3.8+
+    while (response := input(f"[Y/n] {prompt} ").lower()) not in answers:
+        print("Invalid input. Please enter 'y' or 'n' (not case sensitive).")
+    return answers[response]
 
 def view_boxes(img, box_coords, labels, target=None, dest_path=None):
     # TODO: need to update this to take an arbitrary number of box_coords, reference labels from a global dictionary, and pick colors randomly
@@ -12,7 +18,6 @@ def view_boxes(img, box_coords, labels, target=None, dest_path=None):
     img_marked = img_marked.numpy().transpose([1,2,0]) # ndarray objects expect the channel dim to be the last one
     fig, ax = plt.subplots()
     ax.imshow(img_marked)
-    # Remove axes and whitespace
     ax.axis('off')  # Turns off axes
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0)  # Removes whitespace
     #plt.imshow(img_marked)
@@ -26,17 +31,13 @@ def view_boxes(img, box_coords, labels, target=None, dest_path=None):
 
 # borrowed all the image utility functions from my other projects
 
-def is_batch_tensor(tensor: Union[torch.Tensor, np.ndarray]):
-    ''' test if shape is (N,C,H,W) or (C,H,W) '''
-    return int(len(tensor.shape) == 4) # 0 if shape is (C,H,W), 1 if shape is (N,C,H,W)
-
 def tensor_to_ndarray(tensor: torch.Tensor) -> np.ndarray:
     ''' convert pytorch tensor in shape (N,C,H,W) or (C,H,W) to ndarray of shape (N,H,W,C) or (H,W,C) '''
     assert isinstance(tensor, torch.Tensor), f"input must be a torch.Tensor object; got {type(tensor)}"
     if tensor.dim() not in [3,4]:
         return tensor.numpy()
     # TODO: check if tensor is already permuted to shape below
-    is_batch = is_batch_tensor(tensor)
+    is_batch = int(tensor.dim() == 4)
     new_dims = (0,2,3,1) if is_batch else (1,2,0)
     # NOTE: might be faster to do torch.permute(new_dims).numpy()
     np_array = np.transpose(tensor.numpy(), new_dims)

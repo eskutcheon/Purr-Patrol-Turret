@@ -3,33 +3,38 @@ try:
 except Exception as e:
     print("Warning: OpenCV not installed. To use motion detection, make sure you've properly configured OpenCV.")
 import time
+from typing import Union, Optional, Tuple, List
+from PIL import Image
 import torch
 import numpy as np
 import torchvision.transforms as TT
 import torch.nn.functional as F
-import utils
+from utils import enforce_type
+
 
 class ToCuda(object):
-    def __call__(self, pic):
+    def __call__(self, pic: Union[torch.Tensor, np.ndarray, Image]) -> torch.Tensor:
         """
         Args:
             pic (PIL Image or numpy.ndarray): Image to be converted to tensor.
         Returns:
             Tensor: Converted image.
         """
-        return pic.to(device="cuda")
+        if not pic.is_cuda:
+            pic = pic.to(device="cuda")
+        return pic
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
 
-class VideoUtils(object):
+class MotionTracker(object):
     def __init__(self, camera_port):
         self.get_grayscale_tensor = TT.Compose([
             TT.ToTensor(),
-            ToCuda(),
+            ToCuda(), # may remove this later if needed
             TT.Resize(size=(360, 480), interpolation=TT.InterpolationMode.BILINEAR, antialias=True),
             TT.Grayscale(num_output_channels=1),
-            TT.GaussianBlur((21,21), sigma=3.5) # 3.5 = what the original sigma came out to be with k=21 in cv2.GaussianBlur
+            TT.GaussianBlur((21,21), sigma=3.5) # 3.5 = what the original code's sigma came out to be with k=21 in cv2.GaussianBlur
         ])
         self.vid_capture = cv2.VideoCapture(camera_port)
         self.first_frame = None
@@ -49,14 +54,15 @@ class VideoUtils(object):
             cv2.imshow('Video', frame)
             if cv2.waitKey(1) & 0xFF == ord('q'): #checking for a q key press every millisecond to break the video loop.
                 break
-        self.close_camera_feed()
+        self._close_camera_feed()
 
-    def close_camera_feed(self):
+    def _close_camera_feed(self):
         # When everything is done, release the capture
         self.vid_capture.release()
         cv2.destroyAllWindows()
 
-    def init_first_frame(self, img):
+    @enforce_type("tensor")
+    def _init_first_frame(self, img):
         if self.new_frame is None:
             self.new_frame = img
             return None
@@ -76,17 +82,29 @@ class VideoUtils(object):
         return (frame > threshold_value/255).type(torch.float)
 
     @staticmethod
+    @enforce_type("tensor")
+    def resize_frame(frame, new_width=500):
+        """Resizes frame based on the original aspect ratio."""
+        H, W = frame.shape[-2:]  # Get height and width
+        new_height = int(H * (new_width / float(W))) # Calculate new height based on aspect ratio
+        frame = F.interpolate(frame.unsqueeze(0), size=(new_height, new_width), mode='bilinear', align_corners=False).squeeze(0)
+        return frame
+
+    @staticmethod
+    @enforce_type("tensor")
     def dilate_tensor(tensor, kernel_size=3, num_iter=2):
         # Create a dilation kernel
         kernel = torch.ones((1, 1, kernel_size, kernel_size), device=tensor.device)
-        tensor = tensor.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
+        while tensor.dim() < 4:
+            tensor = tensor.unsqueeze(0)  # Add batch and channel dimensions
         # Apply dilation
         for _ in range(num_iter):
             tensor = F.conv2d(tensor, kernel, padding=kernel_size//2)
+        tensor = torch.clamp(tensor, 0, 1)  # Ensure values are within range [0, 1]
         return tensor.squeeze(0).squeeze(0)  # Remove batch and channel dimensions
 
     @staticmethod
-    def get_best_contour(mask, threshold):
+    def _get_best_contour(mask, threshold):
         # Convert tensor to numpy array and back to uint8
         mask_np = mask.cpu().numpy().astype(np.uint8)
         contours, _ = cv2.findContours(mask_np, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -99,31 +117,34 @@ class VideoUtils(object):
                 best_cnt = cnt
         return best_cnt
 
-    # TODO: decompose this into more functions for better flexibility
+
+
     def find_motion(self, callback, show_video=False):
         time.sleep(0.25)
         # loop over the frames of the video
         while True:
             # grab the current frame and initialize the occupied/unoccupied text
-            (grabbed, frame) = self.vid_capture.read()
+            grabbed, frame = self.vid_capture.read()
             # if the frame could not be grabbed, then we have reached the end of the video
             if not grabbed:
                 break
             # covert from BGR to RGB so that all the torchvision stuff works right
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame = self.resize_frame(frame)
             # probably want to decompose this further into tensor creation and resizing and a separate grayscaling
             gray_img = self.get_grayscale_tensor(frame)
-            # if the first frame is None, initialize it
+            # if the first frame is None, initialize it with the grayscale image
             if self.first_frame is None:
-                self.first_frame = self.init_first_frame(gray_img)
+                self.first_frame = self._init_first_frame(gray_img)
                 if self.first_frame is None:
                     continue
-            frame_delta = torch.abs(self.first_frame, gray_img)
+            frame_delta = torch.abs(self.first_frame - gray_img)
             thresh = self.apply_threshold(frame_delta, 25)
-
+            thresh = self.dilate_tensor(thresh)
             # Find contour and process
-            contour = self.get_best_contour(thresh, 5000)
+            contour = self._get_best_contour(thresh, 5000)
             if contour is not None:
+                # TODO: need to add all the targeting stuff here
                 # Draw bounding box and callback
                 # bbox = calculate_bounding_box(contour)
                 # frame = draw_bounding_box(frame, bbox)
@@ -136,9 +157,10 @@ class VideoUtils(object):
                 # if the `q` key is pressed, break from the lop
                 if key == ord("q"):
                     break
-        self.close_camera_feed()
+        self._close_camera_feed()
 
-    def get_best_contour(self, imgmask, threshold):
+
+    def _get_best_contour(self, imgmask, threshold):
         im, contours, hierarchy = cv2.findContours(imgmask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         best_area = threshold
         best_cnt = None
