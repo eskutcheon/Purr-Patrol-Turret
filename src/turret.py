@@ -7,6 +7,8 @@ import sys
 import termios
 import contextlib
 from copy import deepcopy
+import numpy as np
+import torch
 # TODO: replace this with the Jetson library and track down usage - Adafruit should still be the same since the motor driver is an Adafruit board
     # relevant methods only found in Turret class
 #import RPi.GPIO as GPIO
@@ -38,10 +40,9 @@ def raw_mode(file):
 
 
 
+
 class Turret(object):
-    """
-    Class used for turret control.
-    """
+    """ Class used for turret functionality encapsulation. """
     # TODO: figure out this stepper motor operation above all else
     # TODO: may also need to setup the sprayer pins here
     def __init__(self, friendly_mode=True, specific_target=False):
@@ -65,22 +66,37 @@ class Turret(object):
         GPIO.output(RELAY_PIN, GPIO.LOW)
 
 
-    def _parse_keyboard_input(self, ch: str, motor, is_reversed: bool, step_size: int = 5):
-        """ Parses a single character of keyboard input and applies the corresponding motor action.
-            :param ch: Keyboard character input.
+    def _parse_keyboard_input(self, motor, is_reversed: bool, valid_keys=None, step_size=5, additional_action=None):
+        """ Generalized keyboard input parser with abstraction for context management and loop logic.
             :param motor: Motor object to control.
             :param is_reversed: Boolean indicating if the motor direction is reversed.
+            :param valid_keys: Set of valid keys to parse. Defaults to {'w', 's', 'a', 'd'}.
             :param step_size: Number of steps for the motor movement.
+            :param additional_action: Callable for any additional actions based on specific input.
         """
+        if valid_keys is None:
+            valid_keys = {'w', 's', 'a', 'd'}
         command_dict = {
             "w": lambda: self.move_forward(motor, step_size) if not is_reversed else self.move_backward(motor, step_size),
             "s": lambda: self.move_backward(motor, step_size) if not is_reversed else self.move_forward(motor, step_size),
             "a": lambda: self.move_backward(motor, step_size) if is_reversed else self.move_forward(motor, step_size),
             "d": lambda: self.move_forward(motor, step_size) if is_reversed else self.move_backward(motor, step_size),
         }
-        if ch in command_dict:
-            movement_func: callable = command_dict[ch]
-            movement_func()
+        def process_input(ch):
+            if ch in command_dict:
+                command_dict[ch]()
+            elif additional_action and callable(additional_action):
+                additional_action(ch)
+        # actual loop logic for parsing input
+        with raw_mode(sys.stdin):
+            try:
+                while True:
+                    ch = sys.stdin.read(1)
+                    if not ch or ch == "\n":
+                        break
+                    process_input(ch)
+            except (KeyboardInterrupt, EOFError):
+                print("Exiting input loop...")
 
 
     def calibrate(self):
@@ -93,41 +109,31 @@ class Turret(object):
         self.__calibrate_x_axis()
         print("Calibration finished.")
 
+    def calibrate_axis(self, axis: str, motor, is_reversed: bool):
+        """ Generalized axis calibration.
+            :param axis: Name of the axis ('x' or 'y') being calibrated.
+            :param motor: Motor object for the axis.
+            :param is_reversed: Whether the motor direction is reversed.
+        """
+        print(f"Calibrating {axis}-axis. Use 'w', 's' (for y) or 'a', 'd' (for x). Press Enter to finish.")
+        self._parse_keyboard_input(motor, is_reversed)
+
     def __calibrate_x_axis(self):
         """ Waits for input to calibrate the x axis (yaw) of the turret. """
-        with raw_mode(sys.stdin):
-            try:
-                while True:
-                    ch = sys.stdin.read(1)
-                    if not ch or ch == "\n":
-                        break
-                    # changed this to check the keys and just simplify the conditional chain
-                    self._parse_keyboard_input(ch, self.sm_x, MOTOR_X_REVERSED, step_size=5)
-            except (KeyboardInterrupt, EOFError):
-                print("Error: Unable to calibrate turret. Exiting...")
-                sys.exit(1)
+        self.calibrate_axis('x', self.sm_x, MOTOR_X_REVERSED)
 
     def __calibrate_y_axis(self):
         """ Waits for input to calibrate the y axis (tilt) of the turret. """
-        with raw_mode(sys.stdin):
-            try:
-                while True:
-                    ch = sys.stdin.read(1)
-                    if not ch or ch == "\n":
-                        break
-                    # changed this to check the keys and just simplify the conditional chain
-                    # NOTE: may need to be elif like the x-axis calibration
-                    self._parse_keyboard_input(ch, self.sm_y, MOTOR_Y_REVERSED, step_size=5)
-            except (KeyboardInterrupt, EOFError):
-                print("Error: Unable to calibrate turret. Exiting...")
-                sys.exit(1)
+        self.calibrate_axis('y', self.sm_y, MOTOR_Y_REVERSED)
+
 
     def motion_detection(self, show_video=False):
-        """ Uses the camera to move the turret. OpenCV ust be configured to use this """
-        MotionTracker.find_motion(self.__move_axis, show_video=show_video)
+        """ Uses the camera to move the turret. OpenCV must be configured to use this """
+        MotionTracker.find_motion(self.move_axis, show_video=show_video)
 
 
-    def __move_axis(self, contour, frame):
+    # TODO: replace bounding box computation with a hand-rolled method with torch.Tensor
+    def move_axis(self, contour: np.ndarray, frame: torch.Tensor):
         """ Moves the turret based on the detected object's position - used as a callback function in the MotionTracker """
         should_fire, target_coord = False, []
         (v_h, v_w) = frame.shape[-2:]
@@ -137,26 +143,33 @@ class Turret(object):
             target_coord = [x + w / 2, y + h / 2]
         else:
             should_fire, target_coord = self.target_detector.scan_frame(frame)
+        self.move_to_target(target_coord, (v_w, v_h), should_fire)
+
+    def move_to_target(self, target_coord, frame_dims, should_fire=False):
+        """ Moves the turret to the specified target coordinates.
+            :param target_coord: (x, y) pixel coordinates of the target in the frame.
+            :param frame_dimensions: (width, height) of the frame.
+        """
+        v_w, v_h = frame_dims
         target_steps_x = (2 * MAX_STEPS_X * target_coord[0] / v_w) - MAX_STEPS_X
         target_steps_y = (2 * MAX_STEPS_Y * target_coord[1] / v_h) - MAX_STEPS_Y
-        print("x: %s, y: %s" % (str(target_steps_x), str(target_steps_y)))
-        print("current x: %s, current y: %s" % (str(self.current_x_steps), str(self.current_y_steps)))
-        t_x = self.__move_motor(self.current_x_steps, target_steps_x, self.sm_x, MOTOR_X_REVERSED)
-        t_y = self.__move_motor(self.current_y_steps, target_steps_y, self.sm_y, MOTOR_Y_REVERSED)
-        t_fire = threading.Thread(target=Turret.fire) if self.__should_fire(target_steps_x, target_steps_y, should_fire) else None
-        t_x.start()
-        t_y.start()
-        if t_fire:
-            t_fire.start()
-        t_x.join()
-        t_y.join()
-        if t_fire:
-            t_fire.join()
+        print(f"Target steps - x: {target_steps_x}, y: {target_steps_y}")
+        thread_move_x = self.__move_motor(self.current_x_steps, target_steps_x, self.sm_x, MOTOR_X_REVERSED)
+        thread_move_y = self.__move_motor(self.current_y_steps, target_steps_y, self.sm_y, MOTOR_Y_REVERSED)
+        thread_fire = threading.Thread(target=self.fire) if self.__should_fire(target_steps_x, target_steps_y, should_fire) else None
+        thread_move_x.start()
+        thread_move_y.start()
+        if thread_fire:
+            thread_fire.start()
+        thread_move_x.join()
+        thread_move_y.join()
+        if thread_fire:
+            thread_fire.join()
 
     def __move_motor(self, current_steps, target_steps, motor, is_reversed) -> threading.Thread:
         delta = target_steps - current_steps
         if delta != 0:
-            direction = self.move_backward if (delta < 0) ^ is_reversed else self.move_forward
+            direction = self.move_backward if (delta < 0 and is_reversed) else self.move_forward
             return threading.Thread(target=direction, args=(motor, 2,))
         return threading.Thread()  # Returns a dummy thread if no movement is needed
 
@@ -169,27 +182,25 @@ class Turret(object):
 
     def interactive(self):
         """ Starts an interactive session. Key presses determine movement. """
-        self.move_forward(self.sm_x, 1)
-        self.move_forward(self.sm_y, 1)
-        print('Commands: Pivot with (a) and (d). Tilt with (w) and (s). Exit with (q)\n')
-        # TODO: abstract this into some base functionality since it's so long - maybe replace the calibration code with it also
-        with raw_mode(sys.stdin):
-            try:
-                while True:
-                    ch = sys.stdin.read(1)
-                    if not ch or ch == "q":
-                        break
-                    motor = self.sm_x if ch in ["a", "d"] else self.sm_y
-                    is_reversed = MOTOR_X_REVERSED if ch in ["a", "d"] else MOTOR_Y_REVERSED
-                    if ch == "\n":
-                        Turret.fire()
-                    else:
-                        self._parse_keyboard_input(ch, motor, is_reversed)
-            except (KeyboardInterrupt, EOFError):
-                pass
+        def fire_action(ch):
+            if ch == "q":
+                sys.exit(0)
+            elif ch == "\n":
+                self.fire()
+        # parse keyboard input in a continuous interactive session
+        #self.move_forward(self.sm_x, 1)
+        #self.move_forward(self.sm_y, 1)
+        #print('Commands: Pivot with (a) and (d). Tilt with (w) and (s). Fire with (Enter). Exit with (q)\n')
+        self._parse_keyboard_input(
+            motor=None,  # Motor selection is dynamic based on input
+            is_reversed=False,  # Dynamically chosen per input
+            additional_action=fire_action,
+            valid_keys={'w', 's', 'a', 'd', 'q', '\n'},
+            step_size=5
+        )
 
-    @staticmethod
-    def fire():
+
+    def fire(self):
         GPIO.output(RELAY_PIN, GPIO.HIGH)
         time.sleep(1)
         GPIO.output(RELAY_PIN, GPIO.LOW)
@@ -217,12 +228,8 @@ class Turret(object):
         """ Recommended for auto-disabling motors on shutdown """
         #self.mh.getMotor(1).run(Adafruit_MotorHAT.RELEASE)
         #self.mh.getMotor(2).run(Adafruit_MotorHAT.RELEASE)
-        #self.mh.getMotor(3).run(Adafruit_MotorHAT.RELEASE)
-        #self.mh.getMotor(4).run(Adafruit_MotorHAT.RELEASE)
         self.mh.getMotor(1).run(MotorKit.RELEASE)
         self.mh.getMotor(2).run(MotorKit.RELEASE)
-        self.mh.getMotor(3).run(MotorKit.RELEASE)
-        self.mh.getMotor(4).run(MotorKit.RELEASE)
 
 
 if __name__ == "__main__":
