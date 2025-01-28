@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import torch
 import numpy as np
 import torchvision as TV
-from typing import Union, List, Dict, Callable
+from typing import Union, List, Dict, Callable, Tuple
 
 
 def get_user_confirmation(prompt):
@@ -80,3 +80,30 @@ def get_normalized_image(img: torch.Tensor) -> torch.FloatTensor:
     elif is_float_dtype(img) and torch.max(img) > 1+TOL:
         img /= 255
     return img
+
+
+def get_scaled_dims(input_shape: Tuple[int, int], max_size: int) -> Tuple[int, int]:
+    """ get dimensions of input such that longest dimension <= max_size; scales the shorter dimension by the same factor
+        :param input_shape: Tuple (H, W) representing the input frame dimensions
+        :param max_size: Maximum size for the longest dimension
+        :return: Tuple (H, W) with the scaled dimensions
+    """
+    H, W = input_shape
+    long_dim = max(H, W)
+    if long_dim > max_size:
+        scale = max_size / float(long_dim)
+        H = int(H * scale)
+        W = int(W * scale)
+    return H, W
+
+
+#######################################################################################################################
+# ~ new code for the major refactor - mostly the decorators for now
+#######################################################################################################################
+"""
+TODO: write decorators for reusable logic, such as error handling, logging, and mode-specific behavior
+
+retry_on_failure: Retries failed operations (e.g., sending data to the server)
+log_event: Logs key events like turret movement or firing
+mode_specific: Adapts behavior for interactive vs network modes
+"""

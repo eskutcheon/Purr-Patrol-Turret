@@ -3,9 +3,13 @@ Purr Patrol Turret is a robotics project designed to detect and deter pets (prim
 
 It integrates a simple turret system with an infrared camera running on an NVIDIA Jetson Nano for advanced tracking and targeting using object detection and classification networks running on CUDA.
 
-The camera system identifies pets and plants within a scene, detects overlap of bounding boxes of pets and plants that happens when pets start tampering with plants, targets the center of their bounding box, and activates a precision jet of water from a sprayer
+The camera system identifies pets and plants within a scene, detects overlap of bounding boxes of pets and plants that happens when pets start tampering with plants, targets the center of their bounding box, and activates a precision jet of water from a sprayer.
 
-Though the project has been heavily extended since inception, it was originally based on [*HackerShackOfficial*'s `Tracking-Turret` repository](https://github.com/HackerShackOfficial/Tracking-Turret) that activated an airsoft turret based on simple motion detection.
+Though the project has been extended to the point that nothing remains, it was originally based on [*HackerShackOfficial*'s `Tracking-Turret` repository](https://github.com/HackerShackOfficial/Tracking-Turret) that activated an airsoft turret based on simple motion detection.
+
+## Features
+
+
 
 
 ## Install Guide
@@ -50,6 +54,6 @@ RELAY_PIN = 22
 ```
 
 
-# Running the Turret
+## Running the Turret
 
 **!! UNDER CONSTRUCTION !!**

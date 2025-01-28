@@ -1,6 +1,5 @@
 import cv2
 import time
-# TODO: probably need to replace usage of this with `multiprocessing`
 import threading
 import atexit
 import sys
@@ -9,17 +8,16 @@ import contextlib
 from copy import deepcopy
 import numpy as np
 import torch
-# TODO: replace this with the Jetson library and track down usage - Adafruit should still be the same since the motor driver is an Adafruit board
-    # relevant methods only found in Turret class
-#import RPi.GPIO as GPIO
+# NOTE: Adafruit should still be the same since the motor driver is an Adafruit board
+# TODO: revert back to Adafruit after moving back to the Raspberry Pi
 import Jetson.GPIO as GPIO
-#       This is apparently deprecated:
+#       ! This is apparently deprecated:
 #       from Adafruit_MotorHAT import Adafruit_MotorHAT, Adafruit_DCMotor, Adafruit_StepperMotor
 # using their recommendation here:
 #https://github.com/adafruit/Adafruit_CircuitPython_MotorKit
 from adafruit_motorkit import MotorKit
-from config import *
-from motion_tracking2 import MotionTracker
+from config.config import *
+from motion_tracking import MotionTracker
 from object_detection import Detector
 from utils import get_user_confirmation
 
@@ -43,8 +41,6 @@ def raw_mode(file):
 
 class Turret(object):
     """ Class used for turret functionality encapsulation. """
-    # TODO: figure out this stepper motor operation above all else
-    # TODO: may also need to setup the sprayer pins here
     def __init__(self, friendly_mode=True, specific_target=False):
         self.target_detector = Detector() if specific_target else None
         self.friendly_mode = friendly_mode
@@ -60,7 +56,7 @@ class Turret(object):
         self.sm_y = self.mh.getStepper(200, 2)      # 200 steps/rev, motor port #2
         self.sm_y.setSpeed(5)                       # 5 RPM
         self.current_y_steps = 0
-        # Relay
+        # Power relay to activate the sprayer
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(RELAY_PIN, GPIO.OUT)
         GPIO.output(RELAY_PIN, GPIO.LOW)
@@ -132,12 +128,11 @@ class Turret(object):
         MotionTracker.find_motion(self.move_axis, show_video=show_video)
 
 
-    # TODO: replace bounding box computation with a hand-rolled method with torch.Tensor
     def move_axis(self, contour: np.ndarray, frame: torch.Tensor):
         """ Moves the turret based on the detected object's position - used as a callback function in the MotionTracker """
         should_fire, target_coord = False, []
         (v_h, v_w) = frame.shape[-2:]
-        # TODO: need to ensure `frame` is a tensor object - really, if contour is a boolean array, it would be really really easy to recreate cv2.boundingRect
+        # TODO: for the new modular version, this function should instead receive the target coordinates (as a list of np.ndarray) directly
         if self.target_detector is None:
             (x, y, w, h) = cv2.boundingRect(contour)
             target_coord = [x + w / 2, y + h / 2]
@@ -175,7 +170,7 @@ class Turret(object):
 
     def __should_fire(self, target_steps_x: float, target_steps_y: float, valid_target = False) -> bool:
         """ Determines if the turret should fire based on the target's position. """
-        # TODO: may need to adjust this to account for the turret's orientation
+        # TODO: probably need to adjust this to account for the turret's orientation
         dx, dy = abs(target_steps_x - self.current_x_steps), abs(target_steps_y - self.current_y_steps)
         return not self.friendly_mode and dx <= 2 and dy <= 2 and valid_target
 
@@ -232,6 +227,7 @@ class Turret(object):
         self.mh.getMotor(2).run(MotorKit.RELEASE)
 
 
+# TODO: will be removing this for the refactored version, but may create a new file for the main function
 if __name__ == "__main__":
     t = Turret(friendly_mode=False, specific_target=False)
     user_input = input("Choose an input mode: (1) Motion Detection, (2) Interactive\n")

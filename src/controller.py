@@ -3,8 +3,8 @@ import threading
 # using their recommendation here:
 #https://github.com/adafruit/Adafruit_CircuitPython_MotorKit
 from adafruit_motorkit import MotorKit
-from config import *
-from motion_tracking2 import MotionTracker
+from config.config import *
+from motion_tracking import MotionTracker
 from object_detection import Detector
 from turret import Turret
 
@@ -14,7 +14,7 @@ class TurretController:
         Modes:
         - Interactive: Direct control via keyboard input.
         - Motion Detection: Shoots at any detected motion.
-        - Object Tracking: Shoots specific detected objects using an object detection neural network
+        - Object Tracking: Shoots specific detected objects using an instance segmentation with bounding boxes neural network
     """
 
     def __init__(self, frame_update_freq=0.5, target_classes=None, friendly_mode=True):
@@ -44,7 +44,7 @@ class TurretController:
         self.motion_tracker.find_motion(callback=self.turret.move_axis, show_video=show_video)
 
     def object_tracking_mode(self):
-        """ Runs the turret in object tracking mode using object detection. """
+        """ Runs the turret in object tracking mode using instance segmentation with bounding boxes. """
         print(f"Object Tracking Mode: Tracking objects {self.target_classes}.")
         self.turret.calibrate()
         while True:
@@ -76,9 +76,7 @@ class TurretController:
             print(f"Invalid mode: {mode}. Available modes are: 'interactive', 'motion', 'tracking'.")
 
     def _capture_frame(self):
-        """ Captures a frame for object tracking.
-            Replace this with your frame capture logic.
-        """
+        """ Captures a frame for object tracking. Replace this with your frame capture logic. """
         raise NotImplementedError("Frame capture logic should be implemented.")
 
     def configure(self, frame_update_freq=None, target_classes=None, friendly_mode=None):

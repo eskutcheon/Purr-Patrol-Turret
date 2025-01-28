@@ -38,7 +38,6 @@ class Detector(object):
                             self.classes.index('potted plant'): 'plant'}
         # TODO: replace the above with self.class_labels = {**self.animal_labels, **self.plant_labels} eventually
         # NOTE: may actually want to add the vase class to this list since it keeps detecting the plant pots as one
-        # should be faster than doing this on the fly
         self.class_int_labels = torch.Tensor(list(self.class_labels.keys()))
         self.animal_labels = {self.classes.index('cat'): 'cat', self.classes.index('dog'): 'dog'}
         # TODO: may extend this and do some more training on a plant dataset if time permits
@@ -85,7 +84,7 @@ class Detector(object):
             label_indices = torch.where(results_pruned["labels"] == label)[0]
             label_boxes = results_pruned["boxes"][label_indices]
             label_scores = results_pruned["scores"][label_indices]
-            # non-maximum suppression to prune less confident results
+            # non-maximum suppression to prune less confident results and join overlapping boxes
             nms_indices = TV.ops.nms(label_boxes, label_scores, iou_threshold=0.2)
             all_boxes.append(label_boxes[nms_indices])
             all_labels.extend([int(label.item()) for _ in range(len(nms_indices))])
