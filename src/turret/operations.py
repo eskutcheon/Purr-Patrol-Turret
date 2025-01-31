@@ -8,7 +8,7 @@ import RPi.GPIO as GPIO
 from ..config import config as cfg
 from .motor import MotorHatInterface
 from .relay import PowerRelayInterface
-from .targeting import TurretPosition
+from .targeting import TurretCoordinates
 
 
 
@@ -25,7 +25,7 @@ class TurretOperation:
         # self.motor_y = self.motorkit.stepper2()
         self.motorkit = MotorHatInterface()
         # initial position, setting current orientation as the origin
-        self.current_position = TurretPosition(0, 0, 0, 0)
+        self.current_position = TurretCoordinates(0, 0, 0, 0)
         self.initial_position = deepcopy(self.current_position)
         self.load_calibration()
         # GPIO setup for power relay module (the firing mechanism)
@@ -91,7 +91,7 @@ class TurretOperation:
         """ Load the calibration data from the file. """
         try:
             with open(cfg.CALIBRATION_FILE, "r") as f:
-                self.current_position = TurretPosition(**json.load(f))
+                self.current_position = TurretCoordinates(**json.load(f))
             print(f"Calibration data loaded: {self.current_position}")
         except FileNotFoundError:
             print("No calibration data found. Using default position (0, 0).")

@@ -1,6 +1,7 @@
 from threading import Thread
 # local imports
 from .state import IdleState
+from .targeting import TurretCoordinates
 
 class TurretController:
     """High-level control logic for the turret."""
@@ -57,6 +58,7 @@ class TurretController:
         """Run the turret in calibration mode."""
         print("Calibration mode. Use 'w', 's', 'a', 'd' to adjust and 'q' to save calibration.")
         def calibration_loop():
+            #curr_position = TurretCoordinates(0, 0, 0, 0)
             valid_keys = {"w", "s", "a", "d"}
             while True:
                 key = input("Enter command: ").strip()

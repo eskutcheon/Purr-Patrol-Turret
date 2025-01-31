@@ -12,8 +12,9 @@ from ..config import config as cfg
 
 
 
+
 @dataclass
-class TurretPosition:
+class TurretCoordinates:
     x: Union[float, int]
     y: Union[float, int]
     theta_x: Union[float, int]
@@ -40,6 +41,14 @@ class TurretPosition:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(x={self.x}, y={self.y}, theta_x={self.theta_x}, theta_y={self.theta_y})"
+
+
+@dataclass
+class CameraCoordinates(TurretCoordinates):
+    pass
+    # TODO: add an offset parameter (in world coordinates) between the turret muzzle and camera lens
+
+
 
 
 @dataclass
@@ -79,3 +88,9 @@ class CalibrationParameters:
         return f"{self.__class__.__name__}({kwargs})"
 
 
+
+
+class TargetingSystem:
+    """ encapsulate the targeting system with the world and camera coordinates and the projection between them """
+    def __init__(self):
+        pass
