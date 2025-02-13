@@ -1,10 +1,7 @@
 import time
 from typing import Dict, Union, List
-import json
-from copy import deepcopy
 from dataclasses import dataclass
 import RPi.GPIO as GPIO
-import numpy as np
 import math
 
 # local imports
@@ -31,6 +28,14 @@ class TurretCoordinates:
         """ Compute the displacement needed to move to the target coordinates """
         return [target_coord[0] - self.x, target_coord[1] - self.y]
 
+    def compute_displacement_from_angles(self, angles: List[Union[float, int]], focal_length: List[Union[float, int]]) -> List[float]:
+        """ Compute the displacement needed to move by the given (in degrees) angular displacement """
+        fx, fy = focal_length
+        dthx, dthy = angles
+        dx = fx * math.tan(math.radians(dthx))
+        dy = fy * math.tan(math.radians(dthy))
+        return dx, dy
+
     def compute_dtheta(self, target_coord: List[Union[float, int]], focal_length: List[Union[float, int]]) -> List[float]:
         """ Compute the change in angles needed to move to the target coordinates """
         dx, dy = self.compute_displacement(target_coord)
@@ -42,8 +47,8 @@ class TurretCoordinates:
         dthy = math.degrees(math.atan(dy / fy))
         return [dthx, dthy]
 
-    def __dict__(self) -> Dict[str, Union[float, int]]:
-        return {"x": self.x, "y": self.y, "theta_x": self.theta_x, "theta_y": self.theta_y}
+    # def __dict__(self) -> Dict[str, Union[float, int]]:
+    #     return {"x": self.x, "y": self.y, "theta_x": self.theta_x, "theta_y": self.theta_y}
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(x={self.x}, y={self.y}, theta_x={self.theta_x}, theta_y={self.theta_y})"

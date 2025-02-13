@@ -10,11 +10,6 @@ except Exception as e:
     print("Warning: OpenCV not installed. To use motion detection, make sure you've properly configured OpenCV.")
 import time
 from typing import Union, Optional, Tuple, List
-# from PIL import Image
-# import torch
-# import numpy as np
-# import torchvision.transforms as TT
-# import torch.nn.functional as F
 # local imports
 from ..utils import enforce_type, get_scaled_dims
 

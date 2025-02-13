@@ -8,17 +8,12 @@ from src.config.config import RELAY_PIN
 def main():
     operation = TurretOperation(relay_pin=RELAY_PIN, interactive=True)
     controller = TurretController(operation)
-    controller.interactive_mode()
+    # testing older method for keyboard inputs that I'd written and never tried
+    controller.interactive()
+    #controller.interactive_mode()
+    
     # keep the script alive so that the user input loop can run
     # In practice you might do something more elegant
-    import time
-    try:
-        while True:
-            time.sleep(0.5)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        operation.cleanup()
 
 if __name__ == "__main__":
     main()

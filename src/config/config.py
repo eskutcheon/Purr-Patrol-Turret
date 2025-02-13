@@ -2,7 +2,8 @@
 
 ### User Parameters ###
 DEGREES_PER_STEP = 1.8
-INTERACTIVE_STEP_MULT = 5
+INTERACTIVE_STEP_MULT = 4
+ROTATION_RANGE = (-45, 45)
 MOTOR_X_REVERSED = False
 MOTOR_Y_REVERSED = False
 MAX_STEPS_X = 30
@@ -12,7 +13,8 @@ RELAY_PIN = 4
 CAMERA_PORT = 0
 CALIBRATION_FILE = "calibration.json"
 #######################
-
+#! TEMPORARY - REMOVE LATER after fixing calibration.json usage
+FOCAL_LENGTH = (1, 1)
 
 ####################################################################################################
 #~ new code for the server logic

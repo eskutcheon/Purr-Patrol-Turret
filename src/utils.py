@@ -1,3 +1,6 @@
+import termios
+import contextlib
+from copy import deepcopy
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
@@ -11,6 +14,23 @@ def get_user_confirmation(prompt):
     while (response := input(f"[Y/n] {prompt} ").lower()) not in answers:
         print("Invalid input. Please enter 'y' or 'n' (not case sensitive).")
     return answers[response]
+
+
+@contextlib.contextmanager
+def raw_mode(file):
+    """ Magic function that allows key presses.
+        :param file:
+    """
+    old_attrs = termios.tcgetattr(file.fileno())
+    new_attrs = deepcopy(old_attrs)
+    new_attrs[3] &= ~(termios.ECHO | termios.ICANON)
+    try:
+        termios.tcsetattr(file.fileno(), termios.TCSADRAIN, new_attrs)
+        yield
+    finally:
+        termios.tcsetattr(file.fileno(), termios.TCSADRAIN, old_attrs)
+
+
 
 def view_boxes(img, box_coords, labels, target=None, dest_path=None):
     # TODO: need to update this to take an arbitrary number of box_coords, reference labels from a global dictionary, and pick colors randomly
