@@ -1,5 +1,7 @@
 import RPi.GPIO as GPIO
 import time
+# import board
+# import digitalio
 
 class PowerRelayInterface:
     """ Interface to a relay module connected to the Raspberry Pi GPIO. """
@@ -9,9 +11,16 @@ class PowerRelayInterface:
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.relay_pin, GPIO.OUT)
         GPIO.output(self.relay_pin, GPIO.LOW)  # defaults to LOW (off)
+        #& ALT: also adding approach that I confirmed working on the Pi:
+        # self.relay = digitalio.DigitalInOut(getattr(board, f"D{self.relay_pin}"))
+        # self.relay.direction = digitalio.Direction.INPUT
 
     def run_n_seconds(self, duration: float = 3):
         """ Fire the relay module for a specified duration. """
         GPIO.output(self.relay_pin, GPIO.HIGH)
         time.sleep(duration)  # duration of fire
         GPIO.output(self.relay_pin, GPIO.LOW)
+        #& ALT: also adding approach that I confirmed working on the Pi:
+        # self.relay.direction = digitalio.Direction.OUTPUT
+        # time.sleep(duration)
+        # self.relay.direction = digitalio.Direction.INPUT

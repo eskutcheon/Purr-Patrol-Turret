@@ -5,6 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 import RPi.GPIO as GPIO
 import numpy as np
+import math
 
 # local imports
 from ..config import config as cfg
@@ -32,9 +33,14 @@ class TurretCoordinates:
 
     def compute_dtheta(self, target_coord: List[Union[float, int]], focal_length: List[Union[float, int]]) -> List[float]:
         """ Compute the change in angles needed to move to the target coordinates """
-        displacement = self.compute_displacement(target_coord)
+        dx, dy = self.compute_displacement(target_coord)
         # FIXME: not finished - this should use camera parameters to compute the angles
-        return [np.rad2deg(np.arctan(displacement[i] / focal_length[i])) for i in range(2)]
+        #return [np.rad2deg(np.arctan(displacement[i] / focal_length[i])) for i in range(2)]
+        fx, fy = focal_length
+        # Just an example formula
+        dthx = math.degrees(math.atan(dx / fx))
+        dthy = math.degrees(math.atan(dy / fy))
+        return [dthx, dthy]
 
     def __dict__(self) -> Dict[str, Union[float, int]]:
         return {"x": self.x, "y": self.y, "theta_x": self.theta_x, "theta_y": self.theta_y}

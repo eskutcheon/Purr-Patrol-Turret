@@ -1,3 +1,7 @@
+
+###!! DEPRECATED - moving to the new implementation and reusing most of this spread across more files and classes
+
+
 import cv2
 import time
 import threading
@@ -17,8 +21,8 @@ import Jetson.GPIO as GPIO
 #https://github.com/adafruit/Adafruit_CircuitPython_MotorKit
 from adafruit_motorkit import MotorKit
 from config.config import *
-from motion_tracking import MotionTracker
-from object_detection import Detector
+from v0.motion_tracking import MotionTracker
+from v0.object_detection import Detector
 from utils import get_user_confirmation
 
 

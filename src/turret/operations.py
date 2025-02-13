@@ -12,27 +12,25 @@ from .targeting import TurretCoordinates
 
 
 
+# TODO: think over whether it would be more apt to call this `TurretOperator` given the way it's treated in interactive mode in the controller
 class TurretOperation:
     """Handles low-level GPIO and motor operations."""
-    def __init__(self, relay_pin):
+    def __init__(self, relay_pin, interactive=False):
         """ Initialize the turret operation with motor channels and GPIO relay pin.
             :param relay_pin: GPIO pin connected to the relay for firing mechanism.
         """
-        # self.motorkit = MotorKit()
-        # #self.relay_pin = relay_pin
-        # # motors for pan (x-axis) and tilt (y-axis)
-        # self.motor_x = self.motorkit.stepper1()
-        # self.motor_y = self.motorkit.stepper2()
+        # using an encapsulated class for both stepper motors
         self.motorkit = MotorHatInterface()
         # initial position, setting current orientation as the origin
+        # TODO: load actual coordinates from a calibration file with last known (or just the default) coordinates
         self.current_position = TurretCoordinates(0, 0, 0, 0)
         self.initial_position = deepcopy(self.current_position)
         self.load_calibration()
         # GPIO setup for power relay module (the firing mechanism)
         self.power_relay = PowerRelayInterface(relay_pin)
-        # GPIO.setmode(GPIO.BCM)
-        # GPIO.setup(self.relay_pin, GPIO.OUT)
-        # GPIO.output(self.relay_pin, GPIO.LOW) # defaults to LOW (off)
+        self.interactive_mode = interactive
+        self.interactive_step_mult = cfg.INTERACTIVE_STEP_MULT
+
 
     @staticmethod
     def degrees_to_halfsteps(degrees):
@@ -40,23 +38,21 @@ class TurretOperation:
         # NOTE: *2 for the number of half steps overall (using stepper.INTERLEAVE)
         return 2 * int(degrees / cfg.DEGREES_PER_STEP)
 
+    # !!! TODO: add safeguards to prevent moving the turret too far in either direction
+
     def move_x(self, degrees):
         """ move turret along the x-axis """
         halfsteps = self.degrees_to_halfsteps(abs(degrees))
         direction = 1 if degrees > 0 else -1
-        # direction = self.motor_x.FORWARD if degrees > 0 else self.motor_x.BACKWARD
         print(f"Moving pan motor: {direction * degrees} degrees ({halfsteps//2} steps).")
-        # self.motor_x.step(steps, direction, MotorKit.INTERLEAVE)
-        self.motorkit.pan_motor.step(halfsteps, direction)
+        self.motorkit.move_pan(halfsteps, direction)
 
     def move_y(self, degrees):
         """ move turret along the y-axis """
         halfsteps = self.degrees_to_halfsteps(abs(degrees))
         direction = 1 if degrees > 0 else -1
-        # direction = MotorKit.FORWARD if degrees > 0 else MotorKit.BACKWARD
         print(f"Moving tilt motor: {direction * degrees} degrees ({halfsteps//2} steps).")
-        # self.tilt_motor.step(steps, direction, MotorKit.INTERLEAVE)
-        self.motorkit.tilt_motor.step(halfsteps, direction)
+        self.motorkit.move_tilt(halfsteps, direction)
 
     def move_to_target(self, target_coord):
         """ Move the turret to the specified coordinates """
@@ -74,27 +70,29 @@ class TurretOperation:
         time.sleep(0.5)  # Simulate movement delay
 
     def fire(self, duration=3):
-        """Fire the turret."""
+        """ Fire the turret """
         print("Firing turret!")
         self.power_relay.run_n_seconds(duration)
-        # GPIO.output(self.relay_pin, GPIO.HIGH)
-        # time.sleep(duration)  # duration of fire
-        # GPIO.output(self.relay_pin, GPIO.LOW)
 
+
+    ######################################################################################################################^
+    #^ REMOVE CALIBRATION CODE
+    ######################################################################################################################^
     def save_calibration(self):
-        """Save the current position as the calibrated position."""
+        """ Save the current position as the calibrated position """
         with open(cfg.CALIBRATION_FILE, "w") as f:
             json.dump(dict(self.current_position), f)
         print(f"Calibration data saved: {self.current_position}")
 
     def load_calibration(self):
-        """ Load the calibration data from the file. """
+        """ Load the calibration data from the file """
         try:
             with open(cfg.CALIBRATION_FILE, "r") as f:
                 self.current_position = TurretCoordinates(**json.load(f))
             print(f"Calibration data loaded: {self.current_position}")
         except FileNotFoundError:
             print("No calibration data found. Using default position (0, 0).")
+    ######################################################################################################################^
 
     def reset_to_initial(self):
         """ Reset the turret to the initial position. """

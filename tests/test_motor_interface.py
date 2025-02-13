@@ -5,27 +5,21 @@ from adafruit_motor import stepper
 
 
 
+
 class MotorHatInterface:
     """ Interface to the Adafruit Motor Hat. """
     def __init__(self):
         """ Initialize the motor hat interface. """
         self.motor_kit = MotorKit()
-        self.pan_motor = StepperMotor(self._get_stepper_motor(1), 1)
-        self.tilt_motor = StepperMotor(self._get_stepper_motor(2), 2)
+        self.pan_motor = StepperMotor(self.get_stepper_motor(1), 1)
+        self.tilt_motor = StepperMotor(self.get_stepper_motor(2), 2)
 
-    def _get_stepper_motor(self, motor_num: Literal[1, 2]) -> stepper.StepperMotor:
+    def get_stepper_motor(self, motor_num: Literal[1, 2]) -> stepper.StepperMotor:
         """ get stepper motor object from the motor kit """
         if motor_num not in [1, 2]:
             raise ValueError(f"Invalid motor number: {motor_num}")
         return getattr(self.motor_kit, f"stepper{motor_num}")()
 
-    def move_pan(self, num_steps: int, direction: Literal[1, -1]):
-        """ move turret along the x-axis """
-        self.pan_motor.step(num_steps, direction)
-
-    def move_tilt(self, num_steps: int, direction: Literal[1, -1]):
-        """ move turret along the y-axis """
-        self.tilt_motor.step(num_steps, direction)
 
 @dataclass
 class StepperMotor:
@@ -44,3 +38,15 @@ class StepperMotor:
             raise ValueError(f"Invalid direction: {direction}. Must be one of {list(self.directions.keys())}")
         for _ in range(steps):
             self.motor.onestep(step_direction, stepper.INTERLEAVE)
+
+
+
+def test_motor_movement():
+    motor_hat = MotorHatInterface()
+    motor_hat.pan_motor.step(100, 1)  # Move pan motor forward
+    motor_hat.tilt_motor.step(100, -1)  # Move tilt motor backward
+
+
+
+if __name__ == "__main__":
+    test_motor_movement()

@@ -6,4 +6,6 @@ detect(frame): Runs instance segmentation on a frame and returns detection resul
 filter_results(results): Filters and processes segmentation results
 calculate_target_coord(detections): Determines target coordinates for the turret
 
+
+NOTE: really just import the majority of the old object_detection.py file from v0
 """

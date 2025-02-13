@@ -4,9 +4,9 @@ import threading
 #https://github.com/adafruit/Adafruit_CircuitPython_MotorKit
 from adafruit_motorkit import MotorKit
 from config.config import *
-from motion_tracking import MotionTracker
-from object_detection import Detector
-from turret import Turret
+from v0.motion_tracking import MotionTracker
+from v0.object_detection import Detector
+from v0.turret_v0 import Turret
 
 
 class TurretController:

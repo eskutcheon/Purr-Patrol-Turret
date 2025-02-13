@@ -1,3 +1,6 @@
+
+###!! DEPRECATED - moving to the new implementation and reusing most of this spread across more files and classes
+
 import os, sys
 from dataclasses import dataclass
 from pprint import pprint
