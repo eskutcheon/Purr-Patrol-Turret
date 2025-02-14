@@ -1,4 +1,4 @@
-import time
+from copy import deepcopy
 from typing import Dict, Union, List, Tuple
 from dataclasses import dataclass
 import math
@@ -54,11 +54,11 @@ class CalibrationParameters:
         # to convert to pixel coordinates, I think you need to divide by width/height of a pixel on the projection plane
     focal_length: Tuple[Union[float, int]] = (1.0, 1.0)
     # optical center / principal point
-    optical_center: List[Union[float, int]] # = [0, 0]
+    optical_center: List[Union[float, int]] = (1.0, 1.0) # = [0, 0]
     # radial distortion coefficients
-    radial_distortion: List[Union[float, int]] # = [0, 0, 0]
+    radial_distortion: List[Union[float, int]] = (1.0, 1.0) # = [0, 0, 0]
     # tangential distortion coefficients (when the lens and the image plane aren't parallel)
-    tan_distortion: List[Union[float, int]] # = [0, 0]
+    tan_distortion: List[Union[float, int]] = (1.0, 1.0) # = [0, 0]
     # skew coefficient (0 for perpendicular axes)
     skew: Union[float, int] = 0
 
@@ -92,19 +92,39 @@ class CalibrationParameters:
 
 class TargetingSystem:
     """ encapsulate the targeting system with the world and camera coordinates and the projection between them """
-    def __init__(self, calibration: CalibrationParameters = None):
+    def __init__(self, current_position: TurretCoordinates = None, calibration: CalibrationParameters = None):
+        if current_position is None:
+            current_position = TurretCoordinates(0, 0, 0, 0)
+        self.current_position = current_position
+        self.initial_position = deepcopy(current_position)
         if calibration is None:
             # TODO: add default json file with calibration parameters
             calibration = CalibrationParameters()
         self.calibration = calibration
 
-    def compute_angular_displacement(self, current_position: TurretCoordinates, target_coord: TurretCoordinates) -> Tuple[float, float]:
+    def compute_angular_displacement(self, target_coord: TurretCoordinates) -> Tuple[float, float]:
         """ Using the turret's current position (x, y, theta_x, theta_y) and calibration fields (e.g. focal length),
             compute how many degrees we must move in pan (dx_deg) and tilt (dy_deg).
         """
-        dx, dy = current_position.compute_displacement(target_coord)
+        dx, dy = self.current_position.compute_displacement(target_coord)
         # e.g. focal_length might be [fx, fy]
         fx, fy = self.calibration.focal_length
         dthx = math.degrees(math.atan(dx / fx))
         dthy = math.degrees(math.atan(dy / fy))
         return (dthx, dthy)
+
+    @staticmethod
+    def compute_displacement_from_angles(angles: List[Union[float, int]], focal_length: List[Union[float, int]]) -> List[float]:
+        """ Compute the displacement needed to move by the given (in degrees) angular displacement """
+        fx, fy = focal_length
+        dthx, dthy = angles
+        dx = fx * math.tan(math.radians(dthx))
+        dy = fy * math.tan(math.radians(dthy))
+        return dx, dy
+
+    def update_current_position(self, dtheta: List[Union[float, int]]) -> None:
+        dx, dy = self.compute_displacement_from_angles(dtheta, self.calibration.focal_length)#cfg.FOCAL_LENGTH)
+        self.current_position.update(self.current_position.x + dx, self.current_position.y + dy, *dtheta)
+
+    def reset_to_initial(self) -> None:
+        self.current_position = self.initial_position

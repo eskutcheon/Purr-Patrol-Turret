@@ -8,10 +8,9 @@ try:
     import cv2
 except Exception as e:
     print("Warning: OpenCV not installed. To use motion detection, make sure you've properly configured OpenCV.")
-import time
-from typing import Union, Optional, Tuple, List
+# from typing import Union, Optional, Tuple, List
 # local imports
-from ..utils import enforce_type, get_scaled_dims
+from ..utils import get_scaled_dims
 
 
 

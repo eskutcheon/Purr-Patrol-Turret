@@ -4,19 +4,21 @@ import termios
 import contextlib
 from copy import deepcopy
 from threading import Thread
+# local imports
+from ..config.types import TurretControllerType
 from .command import FireCommand, MoveRelativeCommand, AimCommand
 
 class TurretState(ABC):
     """ Abstract base class for turret states """
     @abstractmethod
-    def handle(self, control, *args, **kwargs):
+    def handle(self, control: TurretControllerType, *args, **kwargs):
         """Handle the turret's behavior for the current state."""
         pass
 
 
 class IdleState(TurretState):
     """ Idle state - turret is stationary and not targeting """
-    def handle(self, control, *args, **kwargs):
+    def handle(self, control: TurretControllerType, *args, **kwargs):
         print("Turret is idle...")
 
 
@@ -25,13 +27,13 @@ class AimingState(TurretState):
     def __init__(self, target_coord):
         self.target_coord = target_coord
 
-    def handle(self, control, *args, **kwargs):
+    def handle(self, control: TurretControllerType, *args, **kwargs):
         print(f"Aiming at target: {self.target_coord}")
         # assume control has references to: operation, targeting_system, current_position
         cmd = AimCommand(
             control.operation,
             control.targeting_system,
-            control.current_position,
+            #control.current_position,
             self.target_coord
         )
         control.execute_command(cmd)
@@ -40,7 +42,7 @@ class AimingState(TurretState):
 
 class FiringState(TurretState):
     """ Firing state - The turret fires at the target """
-    def handle(self, control, *args, **kwargs):
+    def handle(self, control: TurretControllerType, *args, **kwargs):
         print("Firing at target.")
         control.execute_command(FireCommand(control.operation))
         control.set_state(IdleState())
@@ -49,7 +51,7 @@ class FiringState(TurretState):
 # TODO: not fully realized yet - intended for it to be the base functionality for the interactive mode but record position for calibration
 class CalibrationState(TurretState):
     """ Calibration state - Allows the user to calibrate turret manually """
-    def handle(self, control, axis, step_size=5):
+    def handle(self, control: TurretControllerType, axis, step_size=5):
         print(f"Calibrating {axis}-axis. Use 'w'/'s' or 'a'/'d' to adjust position.")
         def calibration_loop():
             raise NotImplementedError("Calibration loop not implemented yet.")
@@ -85,7 +87,10 @@ class InteractiveState(TurretState):
         self.step_degrees = step_degrees
         self.stop_interactive = False
 
-    def _loop(self, control):
+    def _print_instructions(self):
+        print("Press w/s/a/d to move, space to fire, or q to quit. Use Ctrl+C to fully exit if needed.")
+
+    def _loop(self, control: TurretControllerType):
         from .controller import raw_mode
         from ..config import config as cfg
         degrees_per_press = cfg.INTERACTIVE_STEP_MULT * cfg.DEGREES_PER_STEP
@@ -104,14 +109,17 @@ class InteractiveState(TurretState):
                 elif ch in self.interactive_mapping:
                     cmd = self.interactive_mapping[ch](control.operation, degrees_per_press)
                     control.queue_command(cmd)
+                else:
+                    print(f"Invalid command: `{ch}`")
+                    self._print_instructions()
                 control.process_commands()
         # when done, go back to IdleState
         control.set_state(IdleState())
         control.handle_state()
 
-    def handle(self, control, *args, **kwargs):
-        print("Entering InteractiveState. Press w/s/a/d to move, space to fire, or q to quit.")
-        print("Use Ctrl+C to fully exit if needed.")
+    def handle(self, control: TurretControllerType, *args, **kwargs):
+        print("Entering Interactive State...")
+        self._print_instructions()
         Thread(target=self._loop, args=[control], daemon=True).start()
         try:
             while not self.stop_interactive:

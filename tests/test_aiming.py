@@ -1,6 +1,9 @@
-from turret.operations import TurretOperation
-from turret.targeting import TargetingSystem, TurretCoordinates #, CalibrationParameters
-from turret.command import AimCommand
+import os, sys
+sys.path.append(os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')))
+
+from src.turret.operations import TurretOperation
+from src.turret.targeting import TargetingSystem, TurretCoordinates #, CalibrationParameters
+from src.turret.command import AimCommand
 
 
 def test_integration_aim_command_live():
@@ -9,8 +12,11 @@ def test_integration_aim_command_live():
     targeting_system = TargetingSystem()
     current_pos = TurretCoordinates(0,0,0,0)
     op = TurretOperation(relay_pin=4, interactive=False)
-    cmd = AimCommand(op, targeting_system, current_pos, (100,50))
+    #cmd = AimCommand(op, targeting_system, current_pos, (0.8,-0.4))
+    cmd = AimCommand(op, targeting_system, (0.8,-0.4))
     cmd.execute()
     # if the hardware actually moves, we watch it physically then check that final 'current_pos' is updated
-    assert current_pos.x == 100
-    assert current_pos.y == 50
+    assert current_pos.x == 0.8
+    assert current_pos.y == -0.4
+
+test_integration_aim_command_live()
