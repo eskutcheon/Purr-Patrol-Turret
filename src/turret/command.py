@@ -39,6 +39,30 @@ class FireCommand(Command):
         self.operation.fire()
 
 
+class AimCommand(Command):
+    """Command to aim the turret at a given absolute target (x, y)."""
+    def __init__(self, operation, targeting_system, current_position, target_coord):
+        self.operation = operation
+        self.targeting_system = targeting_system
+        self.current_position = current_position
+        self.target_coord = target_coord
+
+    def execute(self):
+        # compute needed degrees
+        # !!! method doesn't exist yet !!!
+        dthx, dthy = self.targeting_system.compute_degrees_for_target(
+            self.current_position, self.target_coord
+        )
+        # move hardware
+        self.operation.move_to_target(dthx, dthy)
+        # update current_position
+        self.current_position.x = self.target_coord[0]
+        self.current_position.y = self.target_coord[1]
+        self.current_position.theta_x += dthx
+        self.current_position.theta_y += dthy
+
+
+
 class StopCommand(Command):
     """ Command to stop all turret operations """
     def __init__(self, operation):

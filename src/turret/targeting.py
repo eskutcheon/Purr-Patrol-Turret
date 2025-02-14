@@ -1,7 +1,6 @@
 import time
-from typing import Dict, Union, List
+from typing import Dict, Union, List, Tuple
 from dataclasses import dataclass
-import RPi.GPIO as GPIO
 import math
 
 # local imports
@@ -36,20 +35,6 @@ class TurretCoordinates:
         dy = fy * math.tan(math.radians(dthy))
         return dx, dy
 
-    def compute_dtheta(self, target_coord: List[Union[float, int]], focal_length: List[Union[float, int]]) -> List[float]:
-        """ Compute the change in angles needed to move to the target coordinates """
-        dx, dy = self.compute_displacement(target_coord)
-        # FIXME: not finished - this should use camera parameters to compute the angles
-        #return [np.rad2deg(np.arctan(displacement[i] / focal_length[i])) for i in range(2)]
-        fx, fy = focal_length
-        # Just an example formula
-        dthx = math.degrees(math.atan(dx / fx))
-        dthy = math.degrees(math.atan(dy / fy))
-        return [dthx, dthy]
-
-    # def __dict__(self) -> Dict[str, Union[float, int]]:
-    #     return {"x": self.x, "y": self.y, "theta_x": self.theta_x, "theta_y": self.theta_y}
-
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(x={self.x}, y={self.y}, theta_x={self.theta_x}, theta_y={self.theta_y})"
 
@@ -61,14 +46,13 @@ class CameraCoordinates(TurretCoordinates):
 
 
 
-
 @dataclass
 class CalibrationParameters:
     """ Data class for calibration parameters for the camera attached to the turret """
     #* REFERENCE: https://www.mathworks.com/help/vision/ug/camera-calibration.html
     # focal length in terms of distance from the camera to the projection plane
         # to convert to pixel coordinates, I think you need to divide by width/height of a pixel on the projection plane
-    focal_length: List[Union[float, int]] # = [0, 0]
+    focal_length: Tuple[Union[float, int]] = (1.0, 1.0)
     # optical center / principal point
     optical_center: List[Union[float, int]] # = [0, 0]
     # radial distortion coefficients
@@ -79,11 +63,17 @@ class CalibrationParameters:
     skew: Union[float, int] = 0
 
     # TODO read camera calibration parameters from a file elsewhere with the names above and pass the unpacked dict
-    def load_parameters_from_json(self):
-        """ parse dictionary of calibration parameters passed in after reading from calibration.json """
-        # still not entirely sure how I want to represent them in the json file - whether as their usual variable names or the more descriptive names above
-        # NOTE: will need to convert them to a mutable type to update them
-        pass
+    def load_from_json(self, filepath="calibration.json"):
+        import json, os
+        if not os.path.exists(filepath):
+            print(f"No calibration file at {filepath}, using defaults.")
+            return
+        with open(filepath, "r") as f:
+            data = json.load(f)
+        self.focal_length = data.get("focal_length", self.focal_length)
+        self.optical_center = data.get("optical_center", self.optical_center)
+        # etc. for the rest
+        print(f"Loaded calibration: {self}")
 
     def __dict__(self) -> Dict[str, Union[float, int]]:
         return {
@@ -100,8 +90,21 @@ class CalibrationParameters:
 
 
 
-
 class TargetingSystem:
     """ encapsulate the targeting system with the world and camera coordinates and the projection between them """
-    def __init__(self):
-        pass
+    def __init__(self, calibration: CalibrationParameters = None):
+        if calibration is None:
+            # TODO: add default json file with calibration parameters
+            calibration = CalibrationParameters()
+        self.calibration = calibration
+
+    def compute_angular_displacement(self, current_position: TurretCoordinates, target_coord: TurretCoordinates) -> Tuple[float, float]:
+        """ Using the turret's current position (x, y, theta_x, theta_y) and calibration fields (e.g. focal length),
+            compute how many degrees we must move in pan (dx_deg) and tilt (dy_deg).
+        """
+        dx, dy = current_position.compute_displacement(target_coord)
+        # e.g. focal_length might be [fx, fy]
+        fx, fy = self.calibration.focal_length
+        dthx = math.degrees(math.atan(dx / fx))
+        dthy = math.degrees(math.atan(dy / fy))
+        return (dthx, dthy)

@@ -1,24 +1,25 @@
 import time
-from typing import Dict, Union, List
-import json
+from typing import Dict, Union, List, Tuple
 from copy import deepcopy
-import RPi.GPIO as GPIO
 # local imports
 from ..config import config as cfg
 from .hardware import MotorHatInterface, PowerRelayInterface
-from .targeting import TurretCoordinates
+from .targeting import TurretCoordinates, TargetingSystem
 
 
 
 # TODO: think over whether it would be more apt to call this `TurretOperator` given the way it's treated in interactive mode in the controller
 class TurretOperation:
-    """Handles low-level GPIO and motor operations."""
+    """ Handles low-level GPIO and motor operations """
+    # NOTE: if this class is subordinate to a controller, it should probably receive more arguments to its constructor and be less independent
     def __init__(self, relay_pin, interactive=False):
         """ Initialize the turret operation with motor channels and GPIO relay pin.
             :param relay_pin: GPIO pin connected to the relay for firing mechanism.
         """
         # using an encapsulated class for both stepper motors
         self.motorkit = MotorHatInterface()
+        # TODO: think I should be storing current coordinates in the targeting system setting initial position with its own method
+        self.targeting_system = TargetingSystem()
         # initial position, setting current orientation as the origin
         # TODO: load actual coordinates from a calibration file with last known (or just the default) coordinates
             # alternatively, it could be reset to the starting position each time, but an unexpected shutdown would mean it would need recalibrating
@@ -27,7 +28,7 @@ class TurretOperation:
         #self.load_calibration()
         self.power_relay = PowerRelayInterface(relay_pin)
         self.interactive_mode = interactive
-        self.rotation_range = cfg.ROTATION_RANGE
+        self.rotation_range: Tuple[float, float] = cfg.ROTATION_RANGE
 
 
     @staticmethod
@@ -81,7 +82,7 @@ class TurretOperation:
         print(f"Moving turret to {target_coord}")
         # TODO: add some targeting code based on the calibration results to compute theta_x and theta_y to update current_position
             # need to look into how the calibration is usually done first - think I'll have to compute the camera matrix and distortion coefficients
-        degrees: List[float] = self.current_position.compute_dtheta(target_coord)
+        degrees: Tuple[float, float] = self.targeting_system(self.current_position, target_coord) #self.current_position.compute_dtheta(target_coord)
         if degrees[0] != 0:
             self.move_x(degrees[0])
         if degrees[1] != 0:
@@ -94,34 +95,17 @@ class TurretOperation:
         self.power_relay.run_n_seconds(duration)
 
 
-    # ######################################################################################################################^
-    # #^ REMOVE CALIBRATION CODE
-    # ######################################################################################################################^
-    # def save_calibration(self):
-    #     """ Save the current position as the calibrated position """
-    #     with open(cfg.CALIBRATION_FILE, "w") as f:
-    #         json.dump(dict(self.current_position), f)
-    #     print(f"Calibration data saved: {self.current_position}")
-
-    # def load_calibration(self):
-    #     """ Load the calibration data from the file """
-    #     try:
-    #         with open(cfg.CALIBRATION_FILE, "r") as f:
-    #             self.current_position = TurretCoordinates(**json.load(f))
-    #         print(f"Calibration data loaded: {self.current_position}")
-    #     except FileNotFoundError:
-    #         print("No calibration data found. Using default position (0, 0).")
-    # ######################################################################################################################^
-
     def reset_to_initial(self):
         """ Reset the turret to the initial position. """
         print("Resetting turret to initial position...")
+        dtheta_x, dtheta_y = self.targeting_system.compute_angular_displacement(self.current_position, self.initial_position)
         self.current_position = deepcopy(self.initial_position)
-        self.move_x(-self.current_position.theta_x)
-        self.move_y(-self.current_position.theta_y)
+        self.move_x(dtheta_x)
+        self.move_y(dtheta_y)
 
     def cleanup(self):
         """ Clean up GPIO on shutdown """
+        import RPi.GPIO as GPIO
         print("Cleaning up GPIO and resetting turret...")
         self.reset_to_initial()
         GPIO.cleanup()
