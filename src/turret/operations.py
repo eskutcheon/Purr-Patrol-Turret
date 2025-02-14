@@ -44,10 +44,10 @@ class TurretOperation:
     def ensure_within_bounds(self, degrees, current_angle):
         """ Ensure that the turret is within the rotation range """
         theta_lo, theta_hi = self.rotation_range
-        if not theta_lo <= current_angle + degrees <= theta_hi:
-            # TODO: might want to make this a warning and just do nothing
-            raise ValueError(f"Movement exceeds rotation range of {self.rotation_range} degrees. Movement cancelled.")
-        return True
+        in_bounds = theta_lo <= current_angle + degrees <= theta_hi
+        if not in_bounds:
+            print(f"Movement exceeds rotation range of {self.rotation_range} degrees. Movement cancelled.")
+        return in_bounds
 
 
     def move_x(self, degrees):

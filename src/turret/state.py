@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
+import sys, time
+import termios
+import contextlib
+from copy import deepcopy
 from threading import Thread
-from .command import FireCommand, MoveCommand
+from .command import FireCommand, MoveCommand, StopCommand, MoveRelativeCommand
 
 class TurretState(ABC):
     """Abstract base class for turret states."""
@@ -13,7 +17,7 @@ class TurretState(ABC):
 class IdleState(TurretState):
     """Idle state: The turret is stationary and not targeting."""
     def handle(self, control, *args, **kwargs):
-        print("Turret is idle. Waiting for instructions...")
+        print("Turret is idle...")
 
 
 class AimingState(TurretState):
@@ -53,4 +57,61 @@ class CalibrationState(TurretState):
         Thread(target=calibration_loop).start()
 
 
-# may move the commands to this file
+
+@contextlib.contextmanager
+def raw_mode(file):
+    """ Magic function that allows key presses
+        :param file:
+    """
+    old_attrs = termios.tcgetattr(file.fileno())
+    new_attrs = deepcopy(old_attrs)
+    new_attrs[3] &= ~(termios.ECHO | termios.ICANON)
+    try:
+        termios.tcsetattr(file.fileno(), termios.TCSADRAIN, new_attrs)
+        yield
+    finally:
+        termios.tcsetattr(file.fileno(), termios.TCSADRAIN, old_attrs)
+
+
+class InteractiveState(TurretState):
+    """ Spawns a thread to listen for keyboard input; Creates MoveRelativeCommand or FireCommand based on user presses """
+    def __init__(self, step_degrees=5.0):
+        super().__init__()
+        self.interactive_mapping = {
+            "w": lambda op, dtheta: MoveRelativeCommand(op, dx_deg = 0, dy_deg = +dtheta),
+            "s": lambda op, dtheta: MoveRelativeCommand(op, dx_deg = 0, dy_deg = -dtheta),
+            "a": lambda op, dtheta: MoveRelativeCommand(op, dx_deg = -dtheta, dy_deg = 0),
+            "d": lambda op, dtheta: MoveRelativeCommand(op, dx_deg = +dtheta, dy_deg = 0),
+        }
+        self.step_degrees = step_degrees
+        self.stop_interactive = False
+
+    def handle(self, control, *args, **kwargs):
+        print("Entering InteractiveState. Press w/s/a/d to move, space to fire, or q to quit.")
+        print("Use Ctrl+C to fully exit if needed.")
+
+        def interactive_loop():
+            from .controller import raw_mode
+            from ..config import config as cfg
+            degrees_per_press = cfg.INTERACTIVE_STEP_MULT * cfg.DEGREES_PER_STEP
+            with raw_mode(sys.stdin):
+                while not self.stop_interactive:
+                    ch = sys.stdin.read(1)  # read one char at a time
+                    if not ch:
+                        break
+                    if ch == 'q':
+                        print("Exiting interactive mode.")
+                        self.stop_interactive = True
+                        break
+                    elif ch == ' ': # space => fire
+                        cmd = FireCommand(control.operation)
+                        control.queue_command(cmd)
+                    elif ch in self.interactive_mapping:
+                        cmd = self.interactive_mapping[ch](control.operation, degrees_per_press)
+                        control.queue_command(cmd)
+                    control.process_commands()
+            # when done, go back to IdleState
+            control.set_state(IdleState())
+            control.handle_state()
+
+        Thread(target=interactive_loop, daemon=True).start()

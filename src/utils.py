@@ -16,22 +16,6 @@ def get_user_confirmation(prompt):
     return answers[response]
 
 
-@contextlib.contextmanager
-def raw_mode(file):
-    """ Magic function that allows key presses.
-        :param file:
-    """
-    old_attrs = termios.tcgetattr(file.fileno())
-    new_attrs = deepcopy(old_attrs)
-    new_attrs[3] &= ~(termios.ECHO | termios.ICANON)
-    try:
-        termios.tcsetattr(file.fileno(), termios.TCSADRAIN, new_attrs)
-        yield
-    finally:
-        termios.tcsetattr(file.fileno(), termios.TCSADRAIN, old_attrs)
-
-
-
 def view_boxes(img, box_coords, labels, target=None, dest_path=None):
     # TODO: need to update this to take an arbitrary number of box_coords, reference labels from a global dictionary, and pick colors randomly
     img_marked = TV.utils.draw_bounding_boxes(img, box_coords, labels=labels, width=2) #, colors=['red', 'green'])
@@ -56,8 +40,7 @@ def tensor_to_ndarray(tensor: torch.Tensor) -> np.ndarray:
     assert isinstance(tensor, torch.Tensor), f"input must be a torch.Tensor object; got {type(tensor)}"
     if tensor.dim() not in [3,4]:
         return tensor.numpy()
-    # TODO: check if tensor is already permuted to shape below
-    is_batch = int(tensor.dim() == 4)
+    is_batch = tensor.dim() == 4
     new_dims = (0,2,3,1) if is_batch else (1,2,0)
     # NOTE: might be faster to do torch.permute(new_dims).numpy()
     np_array = np.transpose(tensor.numpy(), new_dims)
