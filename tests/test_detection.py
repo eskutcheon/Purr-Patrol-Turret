@@ -31,10 +31,11 @@ def run_targeting_tests(test_img_dir, results_dir):
         time_sum += time.time() - start_time
         print("final boxes:", results.chosen_boxes)
         print("final labels:", results.chosen_labels)
-        print("final target_center:", results.target_center)
-        if results.shoot_flag:
-            print(f"Target detected with IoU overlap {results.overlap_iou}!")
-            view_boxes(test_img, results.chosen_boxes, results.chosen_labels, target=results.target_center, dest_path=output_path)
+        if any(results.shoot_flag):
+            print(f"Target(s) detected with IoU overlap(s) {results.overlap_iou}!")
+            target = results.resolve_target()
+            print("final target_center: ", target)
+            view_boxes(test_img, results.chosen_boxes, results.chosen_labels, target=target, dest_path=output_path)
         print()
     print("avg time per image: ", time_sum/num_test_imgs)
 

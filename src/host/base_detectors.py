@@ -1,10 +1,21 @@
 from typing import Tuple, List, Union, Dict, Optional
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
+from functools import reduce
 from dataclasses import dataclass, field
 import torch
 import torchvision as TV
 # local imports
 from ..utils import get_normalized_image, enforce_type, view_boxes
+
+
+
+def scalar_to_list(value: Union[int, float, bool, str]):
+    """ convert a scalar value to a list of length 1 """
+    if isinstance(value, Iterable) and not isinstance(value, (str, tuple, bytes)):
+        return value
+    return [value]
+
 
 @dataclass
 class DetectionResult:
@@ -22,12 +33,46 @@ class DetectionFeedback:
         - chosen_boxes: the boxes that participated in the final overlap check, with class labels
         - notes: arbitrary info for debugging or future expansions
     """
-    shoot_flag: bool
-    target_center: Tuple[int, int] = (0, 0)
-    overlap_iou: float = 0.0
-    chosen_boxes: List[Tuple[int, int, int, int]] = field(default_factory=list)
+    shoot_flag: List[bool]
+    target_center: List[Tuple[int, int]] = field(default_factory = lambda: [(0, 0)])
+    overlap_iou: List[float] = field(default_factory = lambda: [0.0])
+    # using list as the default for chosen_boxes to simplify downstream processing
+    chosen_boxes: Union[torch.Tensor, List] = field(default_factory=list)
     chosen_labels: List[str] = field(default_factory=list)
-    notes: str = ""
+    notes: Union[str, List[str]] = ""
+
+    def append(self, other: 'DetectionFeedback'):
+        self.resolve_scalars()
+        other.resolve_scalars()
+        # append the other feedback values to the current instance
+        self.shoot_flag.extend(other.shoot_flag)
+        self.target_center.extend(other.target_center)
+        self.overlap_iou.extend(other.overlap_iou)
+        if isinstance(self.chosen_boxes, torch.Tensor):
+            self.chosen_boxes = torch.cat([self.chosen_boxes, other.chosen_boxes])
+        elif isinstance(self.chosen_boxes, list):
+            self.chosen_boxes.extend(other.chosen_boxes if isinstance(other.chosen_boxes, list) else [other.chosen_boxes])
+        else:
+            raise ValueError(f"Invalid type for chosen_boxes: {type(self.chosen_boxes)}. Must be a list or torch.Tensor.")
+        self.chosen_labels.extend(other.chosen_labels)
+        self.notes.extend(other.notes)
+
+    def resolve_scalars(self):
+        self.shoot_flag = scalar_to_list(self.shoot_flag)
+        self.target_center = scalar_to_list(self.target_center)
+        self.overlap_iou = scalar_to_list(self.overlap_iou)
+        self.notes = scalar_to_list(self.notes)
+
+    def resolve_target(self):
+        """ resolve the target center to a single tuple if multiple targets were detected """
+        num_targets = len(self.target_center)
+        if num_targets == 1:
+            return self.target_center[0]
+        elif num_targets > 1:
+            centers = [c for i, c in enumerate(self.target_center) if self.shoot_flag[i]]
+            return tuple([int(round(xi/len(centers))) for xi in map(sum, zip(*centers))])
+        else:
+            raise ValueError("ERROR: `target_center` is empty!")
 
 
 

@@ -1,6 +1,4 @@
-import termios
-import contextlib
-from copy import deepcopy
+import time
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
@@ -28,7 +26,9 @@ def view_boxes(img, box_coords, labels, target=None, dest_path=None):
     if target is not None:
         ax.scatter([target[0]], [target[1]], color="red", marker="x", s=100)
     if dest_path is not None:
+        print(f"Saving marked image to {dest_path}...")
         plt.savefig(dest_path, bbox_inches="tight", pad_inches=0)
+        time.sleep(1)
         plt.close(fig)
     plt.show()
 
