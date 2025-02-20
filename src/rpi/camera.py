@@ -9,6 +9,7 @@ try:
 except Exception as e:
     print("Warning: OpenCV not installed. To use motion detection, make sure you've properly configured OpenCV.")
 # from typing import Union, Optional, Tuple, List
+from threading import Thread
 # local imports
 from ..utils import get_scaled_dims
 
@@ -72,12 +73,15 @@ class CameraFeed:
 
     def display_live_feed(self, window_name="Live Feed", fps=30):
         """ Opens a window with live video. """
-        while True:
-            frame = self.capture_frame()
-            cv2.imshow(window_name, frame)
-            if cv2.waitKey(1000 // fps) & 0xFF == ord('q'): #checking for a q key press every 100 ms to break the video loop.
-                break
-        self._close_feed()
+        print(f"Starting live video. Press 'q' to quit.")
+        def run_feed():
+            while True:
+                frame = self.capture_frame()
+                cv2.imshow(window_name, frame)
+                if cv2.waitKey(1000 // fps) & 0xFF == ord('q'): #checking for a q key press every 100 ms to break the video loop.
+                    break
+            self._close_feed()
+        Thread(target=run_feed, daemon=True).start()
 
 
 class CalibrationCameraFeed(CameraFeed):

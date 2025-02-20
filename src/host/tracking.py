@@ -13,6 +13,9 @@ import torch
 import torchvision.transforms.v2 as TT
 import torch.nn.functional as F
 
+# ! REMOVE LATER - for general idea of time bottlenecks:
+from tqdm import tqdm
+
 
 def to_cuda(img: Union[torch.Tensor, np.ndarray]) -> torch.Tensor:
     if not issubclass(type(img), torch.Tensor):
@@ -24,30 +27,6 @@ def to_cuda(img: Union[torch.Tensor, np.ndarray]) -> torch.Tensor:
         img = img.to(device="cuda")
     return img
 
-
-
-@torch.jit.script
-def find_contours(tensor: torch.Tensor, threshold: float, min_area: int = 5000):
-    """ Extract contours from a binary mask tensor.
-        :param tensor: Input binary mask (1 for foreground, 0 for background) of shape (H, W).
-        :param threshold: Threshold value to filter regions by size.
-        :param min_area: Minimum contour area to include.
-        :return: List of tensors containing the indices for each contour.
-    """
-    # Ensure tensor is binary
-    tensor = (tensor > threshold).float()
-    # Label connected components
-    labeled, num_labels = connected_components(tensor)
-    # Extract contours for each label
-    contours = []
-    for label in range(1, num_labels + 1):  # Skip label 0 (background)
-        mask = labeled == label
-        if mask.sum().item() >= min_area:  # Filter small regions
-            # Find boundary indices
-            boundary = torch.logical_xor(mask, F.max_pool2d(mask.float(), kernel_size=3, stride=1, padding=1).bool())
-            contour_indices = boundary.nonzero(as_tuple=False)
-            contours.append(contour_indices)
-    return contours
 
 
 @torch.jit.script
@@ -83,27 +62,51 @@ def connected_components(tensor: torch.Tensor) -> Tuple[torch.Tensor, int]:
     # kernel = torch.tensor([[0, 1, 0],
     #                        [1, 0, 1],
     #                        [0, 1, 0]], dtype=torch.uint8, device=tensor.device).unsqueeze(0).unsqueeze(0)
-    kernel = get_connectivity_kernel(3, 1)
+    kernel = get_connectivity_kernel(3, 1).to(device=tensor.device)
     # vectorized region labeling - flood fill until no unlabeled foreground pixels remain
     while tensor.any():
         # use the first unlabeled foreground pixel as the seed for the next region
-        seed = (tensor == 1).nonzero(as_tuple=False)[0:1]
+        #seed = (tensor == 1).nonzero(as_tuple=False)[0:1]
+        seed = torch.nonzero(tensor == 1)[0:1]
         current_label += 1
         # create mask for the connected region
         region = torch.zeros_like(tensor)
         region[seed[:, 0], seed[:, 1]] = 1
         # flood fill using convolution
         while True:
-            dilated = torch.conv2d(region.unsqueeze(0).unsqueeze(0).float(), kernel.float(), padding=1)
-            dilated = (dilated.squeeze(0).squeeze(0) > 0).byte() & tensor
+            dilated = torch.conv2d(region.float(), kernel.float(), padding=1)
+            dilated = (dilated > 0).byte() & tensor
             if torch.equal(dilated, region):
                 break
             region = dilated
         # label the current region with the current label
-        labeled[region.bool()] = current_label
+        labeled[region.to(dtype=torch.bool)] = current_label
         # remove most recent labeled region from the original tensor for the loop termination condition
-        tensor[region.bool()] = 0
+        tensor[region.to(dtype=torch.bool)] = 0
     return labeled, current_label
+
+@torch.jit.script
+def find_contours(tensor: torch.Tensor, threshold: float, min_area: int = 5000):
+    """ Extract contours from a binary mask tensor.
+        :param tensor: Input binary mask (1 for foreground, 0 for background) of shape (H, W).
+        :param threshold: Threshold value to filter regions by size.
+        :param min_area: Minimum contour area to include.
+        :return: List of tensors containing the indices for each contour.
+    """
+    # Ensure tensor is binary
+    tensor = (tensor > threshold).float()
+    # Label connected components
+    labeled, num_labels = connected_components(tensor)
+    # Extract contours for each label
+    contours = []
+    for label in range(1, num_labels + 1):  # Skip label 0 (background)
+        mask = labeled == label
+        if mask.sum().item() >= min_area:  # Filter small regions
+            # Find boundary indices
+            boundary = torch.logical_xor(mask, F.max_pool2d(mask.float(), kernel_size=3, stride=1, padding=1).to(dtype=torch.bool))
+            contour_indices = boundary.nonzero()
+            contours.append(contour_indices.cpu())
+    return contours
 
 
 
@@ -114,7 +117,6 @@ class MotionDetection:
         self.min_contour_area = min_contour_area
         self.first_frame = None
         self.preprocessor = TT.Compose([
-            TT.ToTensor(),
             TT.Lambda(to_cuda) if device == "cuda" else TT.Lambda(lambda img: img),
             TT.Grayscale(num_output_channels=1),
             TT.GaussianBlur(self.blur_size, sigma=3.5) # 3.5 = what the original code's sigma came out to be with k=21 in cv2.GaussianBlur
@@ -144,21 +146,7 @@ class MotionDetection:
             self.first_frame = img
             return None
         # Compute absolute difference
-        #frame_delta = cv2.absdiff(self.first_frame, gray)
         frame_delta = torch.abs(self.first_frame - img)
-        #thresh = cv2.threshold(frame_delta, self.threshold, 255, cv2.THRESH_BINARY)[1]
-        #thresh = cv2.dilate(thresh, None, iterations=2)
-        # UPDATE: function calls below may be unnecessary since they're handled in the new `find_contours` function
-        #thresh = self.apply_threshold(frame_delta, self.threshold)
-        #thresh = self.dilate_tensor(thresh)
-        #######################################################################################################################
-        # FIXME: This is a placeholder for the actual contour extraction implemented in Pytorch
-            # might not be worth it since it seems to do a ton of iterations and I'd lose the speed of the C++ backend
-        # contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        # for contour in contours:
-        #     if cv2.contourArea(contour) >= self.min_contour_area:
-        #         return contour
-        #contours = find_contours(thresh, threshold=0.5, min_area=self.min_contour_area)
         contours = find_contours(frame_delta, threshold=0.5, min_area=self.min_contour_area)
         # return largest contour
         if contours:
