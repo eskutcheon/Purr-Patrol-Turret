@@ -18,3 +18,6 @@ def test_basic_motion_tracking():
             print("Contours found:", result2)
     except RuntimeError as e:
         print("Skipping test because camera might be unavailable:", e)
+
+
+test_basic_motion_tracking()

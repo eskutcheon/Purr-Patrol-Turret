@@ -6,16 +6,14 @@ if TYPE_CHECKING:  # ensures imports are only for type-checking and not at runti
     import torchvision.tv_tensors as tv_tensors
 
 
-# custom types for external classes and libraries
-Tensor: TypeAlias = "torch.Tensor"
-FloatTensor: TypeAlias = "torch.FloatTensor"
-IntTensor: TypeAlias = "torch.IntTensor"
-ByteTensor: TypeAlias = "torch.ByteTensor"
-LongTensor: TypeAlias = "torch.LongTensor"
-
+########### Torch Type Hints ###########
+Tensor = NewType("Tensor", "torch.Tensor")
+FloatTensor = NewType("FloatTensor", "torch.FloatTensor")
+IntTensor = NewType("IntTensor", "torch.IntTensor")
+ByteTensor = NewType("ByteTensor", "torch.ByteStorage")
+LongTensor = NewType("LongTensor", "torch.LongTensor")
 # Frequently-used complex types for annotations
-Batch: TypeAlias = Dict[str, Union[Tensor, Any]]  # Example: A batch might be a dictionary with tensors.
-ImgMaskPair: TypeAlias = Dict[str, Union[Tensor, "tv_tensors.Image", "tv_tensors.Mask", Any]]  # Example: A pair of image and mask tensors.
+ImgMaskPair = Dict[str, Union[Tensor, "tv_tensors.Image", "tv_tensors.Mask", Any]]  # Example: A pair of image and mask tensors.
 
 # Your custom classes (aliases referencing your modules)
 #
@@ -29,30 +27,42 @@ if TYPE_CHECKING:
     from src.host.base_detectors import DetectionFeedback, BaseDetector, SSDDetector, FasterRCNNDetector, RetinaNetDetector #, YOLODetector
 
 # Turret specific types
-CommandLike: TypeAlias = "Union[Command, MoveCommand, MoveRelativeCommand, FireCommand, StopCommand, AimCommand]"
-StateLike: TypeAlias = "Union[TurretState, IdleState, AimingState, FiringState, CalibrationState, InteractiveState]"
-OperationLike: TypeAlias = "TurretOperation"
+CommandLike = Union["Command", "MoveCommand", "MoveRelativeCommand", "FireCommand", "StopCommand", "AimCommand"]
+StateLike = Union["TurretState", "IdleState", "AimingState", "FiringState", "CalibrationState", "InteractiveState"]
+OperationLike = NewType("OperationLike", "TurretOperation")  # NewType is used to create a distinct type for clarity
 
-TurretControllerType: TypeAlias = "TurretController"
-TargetingSystemType: TypeAlias = "TargetingSystem"
-TurretCoordinatesType: TypeAlias = "TurretCoordinates"
-CalibrationParamsType: TypeAlias = "CalibrationParameters"
+TurretControllerType = NewType("TurretControllerType", "TurretController")
+TargetingSystemType = NewType("TargetingSystemType", "TurretController")
+# TODO: after incorporating CameraCoordinates, I should make a CoordinatesLike type alias
+TurretCoordinatesType = NewType("TurretCoordinatesType", "TurretCoordinates")
+CalibrationParamsType = NewType("CalibrationParamsType", "CalibrationParameters")
 
-MotorInterfaceType: TypeAlias = "MotorHatInterface"
-PowerRelayType: TypeAlias = "PowerRelayInterface"
-CameraCoordinatesType: TypeAlias = "CameraCoordinates"
+MotorInterfaceType = NewType("MotorInterfaceType"," MotorHatInterface")
+PowerRelayType = NewType("PowerRelayType", "PowerRelayInterface")
+CameraCoordinatesType = NewType("CameraCoordinatesType", "CameraCoordinates")
 
-DetectorLike: TypeAlias = "Union[BaseDetector, SSDDetector, FasterRCNNDetector, RetinaNetDetector]"  #, YOLODetector]"
-DetectionFeedbackType: TypeAlias = "DetectionFeedback"
+DetectorLike = Union["BaseDetector", "SSDDetector", "FasterRCNNDetector", "RetinaNetDetector"]  #, YOLODetector]"
+DetectionFeedbackType = NewType("DetectionFeedbackType", "DetectionFeedback")
 
 
-# __all__ = [
-#     "Tensor",
-#     "FloatTensor",
-#     "IntTensor",
-#     "ByteTensor",
-#     "LongTensor",
-#     "FeatureContainerType",
-#     "Batch",
-#     "ImgMaskPair",
-# ]
+__all__ = [
+    "Tensor",
+    "FloatTensor",
+    "IntTensor",
+    "ByteTensor",
+    "LongTensor",
+    "FeatureContainerType",
+    "ImgMaskPair",
+    "CommandLike",
+    "StateLike",
+    "OperationLike",
+    "TurretControllerType",
+    "TargetingSystemType",
+    "TurretCoordinatesType",
+    "CalibrationParamsType",
+    "MotorInterfaceType",
+    "PowerRelayType",
+    "CameraCoordinatesType",
+    "DetectorLike",
+    "DetectionFeedbackType",
+]

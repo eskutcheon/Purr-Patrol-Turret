@@ -126,5 +126,9 @@ class TargetingSystem:
         dx, dy = self.compute_displacement_from_angles(dtheta, self.calibration.focal_length)#cfg.FOCAL_LENGTH)
         self.current_position.update(self.current_position.x + dx, self.current_position.y + dy, *dtheta)
 
+    def compute_world_coordinates(self, camera_coord: CameraCoordinates) -> TurretCoordinates:
+        """ Compute the world coordinates from the camera coordinates """
+        raise NotImplementedError("compute_world_coordinates not implemented yet.")
+
     def reset_to_initial(self) -> None:
         self.current_position = self.initial_position

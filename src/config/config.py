@@ -2,8 +2,9 @@
 
 ### User Parameters ###
 DEGREES_PER_STEP = 1.8
-INTERACTIVE_STEP_MULT = 4
-ROTATION_RANGE = (-45, 45)
+INTERACTIVE_STEP_MULT = 2
+# TODO: make this a length 4 tuple (xmin, ymin, xmax, ymax) for different axis limits
+ROTATION_RANGE = (-60, 60)
 MOTOR_X_REVERSED = False
 MOTOR_Y_REVERSED = False
 MAX_STEPS_X = 30

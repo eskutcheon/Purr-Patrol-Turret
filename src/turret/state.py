@@ -91,7 +91,6 @@ class InteractiveState(TurretState):
         print("Press w/s/a/d to move, space to fire, or q to quit. Use Ctrl+C to fully exit if needed.")
 
     def _loop(self, control: TurretControllerType):
-        from .controller import raw_mode
         from ..config import config as cfg
         degrees_per_press = cfg.INTERACTIVE_STEP_MULT * cfg.DEGREES_PER_STEP
         with raw_mode(sys.stdin):
