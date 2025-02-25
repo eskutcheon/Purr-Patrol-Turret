@@ -1,0 +1,19 @@
+{
+    "focal_length": [
+        2714.286,
+        2714.286
+    ],
+    "optical_center": [
+        1640,
+        1232
+    ],
+    "field_of_view": [
+        62.2,
+        48.8
+    ],
+    "radial_distortion": [
+        -0.35,
+        0.25
+    ],
+    "skew": 0.0
+}

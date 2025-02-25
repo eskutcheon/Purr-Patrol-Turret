@@ -17,6 +17,9 @@ CALIBRATION_FILE = "calibration.json"
 #! TEMPORARY - REMOVE LATER after fixing calibration.json usage
 FOCAL_LENGTH = (1, 1)
 
+
+
+CHECKERBOARD_SIZE = (9,6)
 ####################################################################################################
 #~ new code for the server logic
 ####################################################################################################

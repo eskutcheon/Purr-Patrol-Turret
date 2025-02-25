@@ -9,7 +9,7 @@ import torchvision as TV
 from ..utils import get_normalized_image, enforce_type, view_boxes
 
 
-
+# TODO: move to utils later
 def scalar_to_list(value: Union[int, float, bool, str]):
     """ convert a scalar value to a list of length 1 """
     if isinstance(value, Iterable) and not isinstance(value, (str, tuple, bytes)):

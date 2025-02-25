@@ -38,12 +38,12 @@ def get_connectivity_kernel(kernel_size: int, max_distance: int) -> torch.Tensor
     """
     assert kernel_size % 2 == 1, "Kernel size must be odd."
     center = kernel_size // 2
-    # Create a grid of Manhattan distances
+    # create grid of Manhattan distances
     grid_x, grid_y = torch.meshgrid(torch.arange(kernel_size), torch.arange(kernel_size), indexing="ij")
     manhattan_distances = torch.abs(grid_x - center) + torch.abs(grid_y - center)
-    # Generate the kernel: 1 for neighbors within the distance, 0 otherwise
+    # generate the kernel: 1 for neighbors within the distance, 0 otherwise
     kernel = (manhattan_distances <= max_distance).int()
-    # Remove the center pixel (not part of the neighbors)
+    # remove the center pixel (not part of the neighbors)
     kernel[center, center] = 0
     return kernel.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
 
@@ -65,8 +65,7 @@ def connected_components(tensor: torch.Tensor) -> Tuple[torch.Tensor, int]:
     kernel = get_connectivity_kernel(3, 1).to(device=tensor.device)
     # vectorized region labeling - flood fill until no unlabeled foreground pixels remain
     while tensor.any():
-        # use the first unlabeled foreground pixel as the seed for the next region
-        #seed = (tensor == 1).nonzero(as_tuple=False)[0:1]
+        # use first unlabeled foreground pixel as the seed for the next region
         seed = torch.nonzero(tensor == 1)[0:1]
         current_label += 1
         # create mask for the connected region
@@ -86,23 +85,20 @@ def connected_components(tensor: torch.Tensor) -> Tuple[torch.Tensor, int]:
     return labeled, current_label
 
 @torch.jit.script
-def find_contours(tensor: torch.Tensor, threshold: float, min_area: int = 5000):
-    """ Extract contours from a binary mask tensor.
-        :param tensor: Input binary mask (1 for foreground, 0 for background) of shape (H, W).
-        :param threshold: Threshold value to filter regions by size.
+def find_contours(thresh_mask: torch.Tensor, min_area: int = 5000):
+    """ Extract contours from a binary mask tensor - updated from using cv2.findContours to pure PyTorch
+        :param thresh_mask: Input binary mask (1 for foreground, 0 for background) of shape (H, W).
         :param min_area: Minimum contour area to include.
         :return: List of tensors containing the indices for each contour.
     """
-    # Ensure tensor is binary
-    tensor = (tensor > threshold).float()
-    # Label connected components
-    labeled, num_labels = connected_components(tensor)
-    # Extract contours for each label
+    # label connected components
+    labeled, num_labels = connected_components(thresh_mask)
+    # extract contours for each label and save the contour indices
     contours = []
     for label in range(1, num_labels + 1):  # Skip label 0 (background)
         mask = labeled == label
         if mask.sum().item() >= min_area:  # Filter small regions
-            # Find boundary indices
+            # get boundary indices
             boundary = torch.logical_xor(mask, F.max_pool2d(mask.float(), kernel_size=3, stride=1, padding=1).to(dtype=torch.bool))
             contour_indices = boundary.nonzero()
             contours.append(contour_indices.cpu())
@@ -122,39 +118,23 @@ class MotionDetection:
             TT.GaussianBlur(self.blur_size, sigma=3.5) # 3.5 = what the original code's sigma came out to be with k=21 in cv2.GaussianBlur
         ])
 
-    @staticmethod
-    def apply_threshold(frame, threshold_value):
-        return (frame > threshold_value/255).type(torch.float)
-
-    @staticmethod
-    def dilate_tensor(tensor: torch.Tensor, kernel_size=3, num_iter=2):
-        # instantiate dilation kernel - it's pretty small so the overhead of creating it each time is negligible
-        kernel = torch.ones((1, 1, kernel_size, kernel_size), device=tensor.device)
-        # ensure the tensor is a batched 4D tensor
-        while tensor.dim() < 4:
-            tensor = tensor.unsqueeze(0)
-        # apply dilation with the convolutional kernel
-        for _ in range(num_iter):
-            tensor = F.conv2d(tensor, kernel, padding=kernel_size//2)
-        return tensor.clamp(0, 1).squeeze(0).squeeze(0)  # Remove batch and channel dimensions
-
     def process_frame(self, frame):
-        """Process a frame to detect motion."""
+        """ process a frame (hypothetically from the RPi camera feed) to detect motion """
         img = self.preprocessor(frame)
-        # Initialize first frame
+        # initialize the first frame
         if self.first_frame is None:
             self.first_frame = img
             return None
-        # Compute absolute difference
+        # get list of contour indices
         frame_delta = torch.abs(self.first_frame - img)
-        contours = find_contours(frame_delta, threshold=0.5, min_area=self.min_contour_area)
+        mask = (frame_delta > self.threshold).float()
+        contours = find_contours(mask, threshold=0.5, min_area=self.min_contour_area)
         # return largest contour
         if contours:
             return max(contours, key=lambda x: len(x))
-        #######################################################################################################################
         return None
 
 
     def reset(self):
-        """Reset the first frame (e.g., after significant changes in the environment)."""
+        """ reset the first frame (e.g., after significant changes in the environment) """
         self.first_frame = None

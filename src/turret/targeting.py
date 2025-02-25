@@ -58,7 +58,7 @@ class CalibrationParameters:
     # radial distortion coefficients
     radial_distortion: List[Union[float, int]] = (1.0, 1.0) # = [0, 0, 0]
     # tangential distortion coefficients (when the lens and the image plane aren't parallel)
-    tan_distortion: List[Union[float, int]] = (1.0, 1.0) # = [0, 0]
+    field_of_view: List[Union[float, int]] = (1.0, 1.0) # = [0, 0]
     # skew coefficient (0 for perpendicular axes)
     skew: Union[float, int] = 0
 
@@ -80,7 +80,7 @@ class CalibrationParameters:
             "focal_length": self.focal_length,
             "optical_center": self.optical_center,
             "radial_distortion": self.radial_distortion,
-            "tan_distortion": self.tan_distortion,
+            "field_of_view": self.field_of_view,
             "skew": self.skew
         }
 
