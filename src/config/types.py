@@ -1,5 +1,5 @@
 # types.py
-from typing import NewType, List, Dict, Any, Union, Callable, Tuple, TypeAlias, TYPE_CHECKING
+from typing import NewType, List, Dict, Any, Union, Callable, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:  # ensures imports are only for type-checking and not at runtime
     import torch
@@ -22,11 +22,16 @@ if TYPE_CHECKING:
     from src.turret.controller import TurretController
     from src.turret.state import TurretState, IdleState, AimingState, FiringState, CalibrationState, InteractiveState
     from src.turret.operations import TurretOperation
-    from src.turret.targeting import TargetingSystem, TurretCoordinates, CameraCoordinates, CalibrationParameters
+    from src.turret.targeting import TurretCoordinates, CameraCoordinates, CalibrationParameters
     from src.turret.hardware import MotorHatInterface, PowerRelayInterface
+    from src.host.tracking import MotionDetector
     from src.host.base_detectors import DetectionFeedback, BaseDetector, SSDDetector, FasterRCNNDetector, RetinaNetDetector #, YOLODetector
+    from src.host.detection import DetectionPipeline
+    from src.rpi.camera import CameraFeed
+    from src.rpi.calibration import CameraCalibrator
 
 # Turret specific types
+# TODO: add new command and states for the new run modes
 CommandLike = Union["Command", "MoveCommand", "MoveRelativeCommand", "FireCommand", "StopCommand", "AimCommand"]
 StateLike = Union["TurretState", "IdleState", "AimingState", "FiringState", "CalibrationState", "InteractiveState"]
 OperationLike = NewType("OperationLike", "TurretOperation")  # NewType is used to create a distinct type for clarity
@@ -35,14 +40,19 @@ TurretControllerType = NewType("TurretControllerType", "TurretController")
 TargetingSystemType = NewType("TargetingSystemType", "TurretController")
 # TODO: after incorporating CameraCoordinates, I should make a CoordinatesLike type alias
 TurretCoordinatesType = NewType("TurretCoordinatesType", "TurretCoordinates")
+CameraCoordinatesType = NewType("CameraCoordinatesType", "CameraCoordinates")
 CalibrationParamsType = NewType("CalibrationParamsType", "CalibrationParameters")
 
 MotorInterfaceType = NewType("MotorInterfaceType"," MotorHatInterface")
 PowerRelayType = NewType("PowerRelayType", "PowerRelayInterface")
-CameraCoordinatesType = NewType("CameraCoordinatesType", "CameraCoordinates")
 
+MotionDetectorType = NewType("MotionDetectorType", "MotionDetector")
 DetectorLike = Union["BaseDetector", "SSDDetector", "FasterRCNNDetector", "RetinaNetDetector"]  #, YOLODetector]"
 DetectionFeedbackType = NewType("DetectionFeedbackType", "DetectionFeedback")
+DetectionPipelineType = NewType("DetectionPipelineType", "DetectionPipeline")
+
+CameraCalibratorType = NewType("CameraCalibratorType", "CameraCalibrator")
+CameraFeedType = NewType("CameraFeedType", "CameraFeed")
 
 
 __all__ = [
@@ -63,6 +73,10 @@ __all__ = [
     "MotorInterfaceType",
     "PowerRelayType",
     "CameraCoordinatesType",
+    "MotionDetectorType",
     "DetectorLike",
     "DetectionFeedbackType",
+    "DetectionPipelineType",
+    "CameraCalibratorType",
+    "CameraFeedType",
 ]

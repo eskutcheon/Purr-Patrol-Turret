@@ -24,8 +24,13 @@ class TurretOperation:
         #self.load_calibration()
         self.power_relay = PowerRelayInterface(relay_pin)
         self.interactive_mode = interactive
+        # letting this be set by the controller or other outside influences instead of the config so that the behavior is more predictable
+        self.safe_mode = False
+        self.max_duration = cfg.MAX_FIRE_DURATION
         self.rotation_range: Tuple[float, float] = cfg.ROTATION_RANGE
 
+    def set_safe_mode(self, flag: bool):
+        self.safe_mode = flag
 
     @staticmethod
     def degrees_to_halfsteps(degrees: float) -> int:
@@ -43,7 +48,7 @@ class TurretOperation:
         theta_lo, theta_hi = self.rotation_range
         in_bounds = theta_lo <= current_angle + degrees <= theta_hi
         if not in_bounds:
-            print(f"Movement exceeds rotation range of {self.rotation_range} degrees. Movement cancelled.")
+            print(f"[OP] Movement exceeds rotation range of {self.rotation_range} degrees. Movement cancelled.")
         return in_bounds
 
     def get_angle_steps(self, degrees: float) -> Tuple[float, int, int]:
@@ -56,7 +61,7 @@ class TurretOperation:
     def move_x(self, degrees: float):
         """ move turret along the x-axis """
         degrees, halfsteps, direction = self.get_angle_steps(degrees)
-        print(f"Moving pan motor: {degrees} degrees ({halfsteps//2} steps).")
+        print(f"[OP] Moving pan motor: {degrees} degrees ({halfsteps//2} steps).")
         current_theta_x = self.targeting_system.current_position.theta_x
         if self.ensure_within_bounds(degrees, current_theta_x):
             self.motorkit.move_pan(halfsteps, direction)
@@ -65,7 +70,7 @@ class TurretOperation:
     def move_y(self, degrees: float):
         """ move turret along the y-axis """
         degrees, halfsteps, direction = self.get_angle_steps(degrees)
-        print(f"Moving tilt motor: {degrees} degrees ({halfsteps//2} steps).")
+        print(f"[OP] Moving tilt motor: {degrees} degrees ({halfsteps//2} steps).")
         # if prospective movement would exceed the rotation range, don't move
         current_theta_y = self.targeting_system.current_position.theta_y
         if self.ensure_within_bounds(degrees, current_theta_y):
@@ -83,7 +88,13 @@ class TurretOperation:
         time.sleep(0.5)  # Simulate movement delay
 
     def fire(self, duration: float = 3):
-        print("Firing turret!")
+        # Only physically run the relay if safe mode is off
+        #~~ NOTE: it may be best to have this logic in each Command themselves
+        duration = min(duration, self.max_duration)
+        if self.safe_mode:
+            print("[OP] SAFE_MODE is ON => skipping fire()")
+            return
+        print(f"[OP] Firing turret for {duration} seconds!")
         self.power_relay.run_n_seconds(duration)
 
 
@@ -98,6 +109,6 @@ class TurretOperation:
     def cleanup(self):
         """ Clean up GPIO on shutdown """
         import RPi.GPIO as GPIO
-        print("Cleaning up GPIO and resetting turret...")
+        print("[OP] Cleaning up GPIO and resetting turret...")
         self.reset_to_initial()
         GPIO.cleanup()

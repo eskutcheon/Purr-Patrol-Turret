@@ -26,13 +26,14 @@ class DetectionPipeline:
         2. Do label-based overlap checks, or pick the highest-scoring bounding box.
         3. Return a final DetectionFeedback dataclass with various values of interest.
     """
+    # TODO: may want to add a factory method with defaults to create a DetectionPipeline in the controller and let it be an optional argument
     def __init__(
         self,
         # TODO: allow detector input to be a string indicating the detector type (probably should save keys and class names in a global dict)
         detector: DetectorLike,
         overlap_threshold: float = 0.1,
         animal_labels: Optional[List[str]] = None,
-        plant_labels: Optional[Union[List[str], str]] = None #["potted plant", "vase"]
+        plant_labels: Optional[Union[List[str], str]] = None
     ):
         self.detector = detector
         # Optionally store label maps or overlap thresholds
@@ -132,3 +133,20 @@ class DetectionPipeline:
             return DetectionFeedback([True], [(center_x, center_y)], [iou_val], chosen_boxes, chosen_labels,
                                     notes=[f"Overlap found with IoU={iou_val} with threshold {self.overlap_threshold}"])
         return None
+
+    @staticmethod
+    def default_factory(
+        detector: Optional[DetectorLike] = None,
+        overlap_threshold: Optional[float] = 0.1,
+        animal_labels: Optional[List[str]] = None,
+        plant_labels: Optional[Union[List[str], str]] = None
+    ) -> 'DetectionPipeline':
+        """ Factory method to create a DetectionPipeline with default values for all arguments """
+        if detector is None:
+            from .base_detectors import FasterRCNNDetector
+            detector = FasterRCNNDetector() # default detector with default score threshold
+        if animal_labels is None:
+            animal_labels = ["cat", "dog"]
+        if plant_labels is None:
+            plant_labels = ["potted plant"]
+        return DetectionPipeline(detector, overlap_threshold, animal_labels, plant_labels)

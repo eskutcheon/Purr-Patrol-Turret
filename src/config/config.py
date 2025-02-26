@@ -1,25 +1,33 @@
 """ Stores centralized configuration values for both the Pi and desktop server """
 
 ### User Parameters ###
+SAFE_MODE = False  # if True, turret will not fire
 DEGREES_PER_STEP = 1.8
 INTERACTIVE_STEP_MULT = 2
+MAX_FIRE_DURATION = 3  # in seconds
 # TODO: make this a length 4 tuple (xmin, ymin, xmax, ymax) for different axis limits
 ROTATION_RANGE = (-60, 60)
+
+
+# hardware config settings:
+CAMERA_PORT = 0
+RELAY_PIN = 4
 MOTOR_X_REVERSED = False
 MOTOR_Y_REVERSED = False
-MAX_STEPS_X = 30
-MAX_STEPS_Y = 15
-RELAY_PIN = 4
-# added this one in case we need it
-CAMERA_PORT = 0
-CALIBRATION_FILE = "calibration.json"
+
 #######################
 #! TEMPORARY - REMOVE LATER after fixing calibration.json usage
 FOCAL_LENGTH = (1, 1)
 
+# tracking and detection config settings:
+MOTION_THRESHOLD = 25  # in pixels
 
 
-CHECKERBOARD_SIZE = (9,6)
+# calibration config settings:
+CHECKERBOARD_SIZE = (8,6) # actually the number of inner corners in the checkerboard pattern
+SQUARE_SIZE = 25.0 # in mm
+CALIBRATION_FILE = "calibration.json"
+
 ####################################################################################################
 #~ new code for the server logic
 ####################################################################################################

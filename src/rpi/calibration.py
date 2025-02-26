@@ -3,15 +3,16 @@ import cv2
 import json
 import numpy as np
 from datetime import datetime
+from typing import Optional, Tuple, List, Callable
 
 
 class CameraCalibrator:
     """ Encapsulates logic for capturing checkerboard corners, running calibrateCamera, and saving parameters to JSON. """
     def __init__(
         self,
-        checkerboard_size=(9, 6),
-        square_size=1.0, # actual dimension of each square [arbitrary unit]
-        save_dir="calibration_images"
+        checkerboard_size: Tuple[int, int] = (9, 6),
+        square_size: float = 1.0, # actual dimension of each square [arbitrary unit]
+        save_dir: str = "calibration_images"
     ):
         # 3D "object points" for a canonical checkerboard (z=0 plane)
         self.checkerboard_size = checkerboard_size
@@ -26,7 +27,7 @@ class CameraCalibrator:
         # scale them by your actual real-world square size
         self._canonical_objp *= square_size
 
-    def capture_checkerboard(self, frame):
+    def capture_checkerboard(self, frame: np.ndarray):
         """ Detect a checkerboard in `frame`. If found, store corners to `self.imgpoints` and known 3D reference corners to `self.objpoints`.
             Then save the frame to disk.
         """
@@ -49,7 +50,9 @@ class CameraCalibrator:
         cv2.imwrite(filename, frame)
         print(f"[CALIB] Captured checkerboard and saved: {filename}")
 
-    def run_calibration(self, frame_size):
+    def run_calibration(self,
+                        frame_size: Tuple[int, int]
+    ) -> Tuple[bool, np.ndarray, np.ndarray, List[np.ndarray], List[np.ndarray], float]:
         """ Once the user finishes capturing images (objpoints & imgpoints), call OpenCV’s calibrateCamera.
             Returns (as length-6 tuple):
                 - ret: bool for success
@@ -68,7 +71,13 @@ class CameraCalibrator:
         error = self._compute_reprojection_error(self.objpoints, self.imgpoints, rvecs, tvecs, mtx, dist)
         return ret, mtx, dist, rvecs, tvecs, error
 
-    def _compute_reprojection_error(self, objpoints, imgpoints, rvecs, tvecs, cameraMatrix, distCoeffs):
+    def _compute_reprojection_error(self,
+                                    objpoints: List[np.ndarray],
+                                    imgpoints: List[np.ndarray],
+                                    rvecs: List[np.ndarray],
+                                    tvecs: List[np.ndarray],
+                                    cameraMatrix: np.ndarray,
+                                    distCoeffs: np.ndarray) -> float:
         """ compute overall average reprojection error across all calibration images """
         total_error = 0
         total_points = 0
@@ -82,7 +91,7 @@ class CameraCalibrator:
         return mean_error
 
 
-    def save_to_json(self, json_path, ret, mtx, dist, rvecs, tvecs, error):
+    def save_to_json(self, json_path: str, ret: bool, mtx: np.ndarray, dist: np.ndarray, rvecs: List[np.ndarray], tvecs: List[np.ndarray], error: float):
         """ Save all relevant calibration parameters to JSON
             Saves:
                 - camera matrix

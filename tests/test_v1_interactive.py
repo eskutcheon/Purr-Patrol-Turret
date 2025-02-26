@@ -8,7 +8,6 @@ from src.config.config import RELAY_PIN
 def main():
     operation = TurretOperation(relay_pin=RELAY_PIN, interactive=True)
     controller = TurretController(operation)
-    # controller.enter_interactive_mode()
     controller.enter_interactive_mode(show_video=True)
 
 if __name__ == "__main__":

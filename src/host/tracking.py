@@ -13,8 +13,6 @@ import torch
 import torchvision.transforms.v2 as TT
 import torch.nn.functional as F
 
-# ! REMOVE LATER - for general idea of time bottlenecks:
-from tqdm import tqdm
 
 
 def to_cuda(img: Union[torch.Tensor, np.ndarray]) -> torch.Tensor:
@@ -106,7 +104,7 @@ def find_contours(thresh_mask: torch.Tensor, min_area: int = 5000):
 
 
 
-class MotionDetection:
+class MotionDetector:
     def __init__(self, threshold=25, blur_size=(21, 21), min_contour_area=5000, device="cuda"):
         self.threshold = threshold
         self.blur_size = blur_size

@@ -2,12 +2,12 @@ import os, sys
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')))
 
 from src.rpi.camera import CameraFeed
-from src.host.tracking import MotionDetection
+from src.host.tracking import MotionDetector
 
 def test_basic_motion_tracking():
     try:
         with CameraFeed(camera_port=0) as cam:
-            motion_det = MotionDetection()
+            motion_det = MotionDetector()
             # capture some frames -> feed them into the motion detector
             frame1 = cam.capture_frame()
             result1 = motion_det.process_frame(frame1)

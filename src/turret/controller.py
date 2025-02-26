@@ -1,13 +1,15 @@
+from typing import List, Optional
 # local imports
-from typing import List
-from src.config.types import TurretControllerType, OperationLike, StateLike, CommandLike
-from .state import IdleState, InteractiveState, CalibrationState
-#from .targeting import TurretCoordinates
-from ..config import config as cfg
+from src.config import config as cfg
+from src.config.types import TurretControllerType, OperationLike, StateLike, CommandLike, MotionDetectorType, DetectionPipelineType
+from src.turret.state import IdleState, InteractiveState, CalibrationState, MotionTrackingOnlyState, MotionTrackingDetectionState
+from src.rpi.camera import CameraFeed
+from src.host.tracking import MotionDetector
+
 
 class TurretController:
     """High-level control logic for the turret."""
-    def __init__(self, operation: OperationLike):
+    def __init__(self, operation: OperationLike) -> TurretControllerType:
         self.operation = operation
         self.targeting_system = operation.targeting_system
         # TODO: integrate a "friendly" state object here that can't be overridden to avoid misfires
@@ -15,44 +17,44 @@ class TurretController:
         self.command_queue: List[CommandLike] = []          # Queue for commands
 
     def set_state(self, state: StateLike):
-        """Transition to a new state."""
+        """ transition to the given state """
         self.current_state = state
 
     def handle_state(self, *args, **kwargs):
-        """Delegate behavior to the current state."""
+        """ delegate behavior to the current state - major method for handling state transitions and therefore actions """
         self.current_state.handle(self, *args, **kwargs)
 
     def execute_command(self, command: CommandLike):
-        """Execute a single command."""
+        """ execute a single command through its internal execute() method """
         command.execute()
 
     def queue_command(self, command: CommandLike):
-        """Add a command to the queue."""
+        """ add a command to the queue """
         self.command_queue.append(command)
 
     def process_commands(self):
-        """Process all queued commands."""
+        """ process all queued commands until the queue is empty """
         while self.command_queue:
             command = self.command_queue.pop(0)
             command.execute()
 
-    def enter_interactive_mode(self, show_video=False):
+
+    def enter_interactive_mode(self, show_video: bool = False):
+        """ launch the turret in interactive mode, with an optional live video feed and WASD controls """
         self.set_state(InteractiveState())
         if not show_video:
             # Immediately handle the new state
             self.handle_state(callback=self.operation.cleanup)
         else:
-            from src.rpi.camera import CameraFeed
             with CameraFeed(cfg.CAMERA_PORT, max_dim_length=1080) as live_feed:
                 live_feed.display_live_feed()
                 self.handle_state(callback=self.operation.cleanup)
 
     def enter_calibration_mode(self):
-        """ launch the turret in calibration mode, working likw interactive mode but with a different state and space bar response """
-        from src.rpi.camera import CameraFeed
+        """ launch the turret in calibration mode, working like interactive mode but with a different state object and space bar response """
         from src.rpi.calibration import CameraCalibrator
         self.set_state(CalibrationState())
-        calibrator = CameraCalibrator(checkerboard_size=cfg.CHECKERBOARD_SIZE, square_size=1.0)
+        calibrator = CameraCalibrator(checkerboard_size=cfg.CHECKERBOARD_SIZE, square_size=cfg.SQUARE_SIZE)
         # We'll show the same “live feed” but in calibration flavor:
         with CameraFeed(cfg.CAMERA_PORT, max_dim_length=1080) as feed:
             # define a key handler that triggers calibrator.capture_checkerboard when pressing space
@@ -65,4 +67,57 @@ class TurretController:
             # start camera feed for capturing images in a background thread
             feed.display_live_feed(window_name="Calibration Feed", fps=30, key_handler=feed_key_handler)
             # CalibrationState's handle() method simultaneously runs in another thread giving turret WASD control, etc.
-            self.handle_state(callback=feed.finalize_calibration(calibrator, feed))
+            self.handle_state(callback=feed.finalize_calibration(calibrator))
+
+    # these could definitely be abstracted into a common base method, but as top-level methods, these are more readable
+    def enter_motion_tracking_only_mode(
+        self,
+        motion_detector: Optional[MotionDetectorType] = None
+    ):
+        """ Start a loop capturing frames and pass them to a MonitoringState that fires on *any* motion. """
+        if motion_detector is None:
+            motion_detector = MotionDetector(threshold=cfg.MOTION_THRESHOLD)
+        # Create the specialized state:
+        new_state = MotionTrackingOnlyState(motion_detector)
+        self.set_state(new_state)
+        # Open camera feed in the controller
+        with CameraFeed(camera_port=cfg.CAMERA_PORT, max_dim_length=720) as feed:
+            # Possibly a loop that checks user input to break:
+            while True:
+                frame = feed.capture_frame()
+                # Pass the frame to the current state’s handle_frame method
+                self.handle_state(frame=frame)
+                # allow pressing 'q' to exit:
+                feed.keypress_monitor()
+        # return to idle afterwards
+        self.set_state(IdleState())
+        self.handle_state()
+
+    def enter_motion_tracking_detection_mode(
+        self,
+        # TODO: may want to add a factory method with defaults to create a DetectionPipeline in the controller and let it be an optional argument
+        detection_pipeline: Optional[DetectionPipelineType] = None,
+        motion_detector: Optional[MotionDetectorType] = None,
+    ):
+        """ Start a loop capturing frames and pass them to a MonitoringState that triggers object detection, and fires accordingly """
+        # if not isinstance(detection_pipeline, DetectionPipelineType):
+        #     raise TypeError(f"Invalid detection pipeline: {detection_pipeline}. Must be a DetectionPipeline object!")
+        if detection_pipeline is None:
+            from src.host.detection import DetectionPipeline
+            detection_pipeline = DetectionPipeline.default_factory()
+        if motion_detector is None:
+            motion_detector = MotionDetector(threshold=cfg.MOTION_THRESHOLD)
+        # Create the specialized state:
+        new_state = MotionTrackingDetectionState(motion_detector, detection_pipeline)
+        self.set_state(new_state)
+        # Open camera feed in the controller
+        with CameraFeed(camera_port=cfg.CAMERA_PORT, max_dim_length=720) as feed:
+            while True:
+                frame = feed.capture_frame()
+                # Pass the frame to the current state
+                self.handle_state(frame=frame)
+                # allow pressing 'q' to exit:
+                feed.keypress_monitor()
+        # Return to idle afterwards
+        self.set_state(IdleState())
+        self.handle_state()

@@ -39,10 +39,12 @@ class TurretCoordinates:
         return f"{self.__class__.__name__}(x={self.x}, y={self.y}, theta_x={self.theta_x}, theta_y={self.theta_y})"
 
 
+# TODO: might actually want this in src/rpi/camera.py instead
 @dataclass
 class CameraCoordinates(TurretCoordinates):
     pass
     # TODO: add an offset parameter (in world coordinates) between the turret muzzle and camera lens
+
 
 
 
