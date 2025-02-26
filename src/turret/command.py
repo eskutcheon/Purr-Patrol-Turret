@@ -1,6 +1,17 @@
 from abc import ABC, abstractmethod
+from typing import Optional, Union, List, Tuple
 # local imports
-from ..config.types import OperationLike, TargetingSystemType, MotionDetectorType, DetectionPipelineType, DetectionFeedbackType
+from src.turret.targeting import CameraCoordinates
+from src.config.types import (
+    OperationLike,
+    TargetingSystemType,
+    MotionDetectorType,
+    DetectionPipelineType,
+    DetectionFeedbackType,
+    CoordinatesLike
+)
+
+
 
 class Command(ABC):
     """ Abstract base class for turret commands """
@@ -9,9 +20,10 @@ class Command(ABC):
         pass
 
 
+#* MoveCommand is unused in favor of MoveRelativeCommand or AimCommand, but I might want to keep it for future reference
 class MoveCommand(Command):
     """ Command to move the turret to an absolute target (Cartesian) coordinate """
-    def __init__(self, operation: OperationLike, target_coord):
+    def __init__(self, operation: OperationLike, target_coord: CoordinatesLike):
         self.operation: OperationLike = operation
         self.target_coord = target_coord
 
@@ -32,7 +44,7 @@ class MoveRelativeCommand(Command):
 
 class FireCommand(Command):
     """ Command to fire the turret """
-    def __init__(self, operation: OperationLike, duration=3):
+    def __init__(self, operation: OperationLike, duration: float = 3.0):
         self.operation: OperationLike = operation
         self.duration = duration
 
@@ -40,17 +52,29 @@ class FireCommand(Command):
         self.operation.fire(duration=self.duration)
 
 
+# TODO: track down all uses and double check the type of target_coord
 class AimCommand(Command):
-    """Command to aim the turret at a given absolute target (x, y)."""
+    """Command to aim the turret at a given target (x, y), which is typically a pixel coordinate in the camera frame """
     #? NOTE: not sure yet whether I want to pass `target_coord` as a list or a TurretCoordinates object
-    def __init__(self, operation: OperationLike, targeting_system: TargetingSystemType, target_coord):
+    def __init__(self,
+                 operation: OperationLike,
+                 targeting_system: TargetingSystemType,
+                 target_coord: Union[CoordinatesLike, List[float, float], Tuple[float, float]]):
+        # initialize AimCommand with the operation, targeting system, and target coordinate
         self.operation: OperationLike = operation
         self.targeting_system: TargetingSystemType = targeting_system
-        self.target_coord = target_coord
+        self.target_coord: CoordinatesLike = target_coord
+        self.is_pixel = isinstance(target_coord, (tuple, list)) and len(target_coord) == 2
+        if not self.is_pixel and not isinstance(target_coord, CoordinatesLike):
+            raise ValueError(f"target_coord must be a length-2 tuple, list, or CoordinatesLike object; got {target_coord}")
 
     def execute(self):
-        # TODO: should probably just replace this with another method later while leaving compute_angular_displacement for other uses
-        # compute needed degrees
+        if self.is_pixel:
+            # Convert from camera pixel coords to TurretCoordinates
+            (u, v) = self.target_coord
+            cam_coord = CameraCoordinates(u=float(u), v=float(v))
+            self.target_coord = self.targeting_system.from_camera_to_turret(cam_coord)
+        # compute needed degrees to rotate from current position to target
         dthx, dthy = self.targeting_system.compute_angular_displacement(self.target_coord)
         # move hardware
         self.operation.apply_angular_movement(dthx, dthy)
@@ -97,11 +121,15 @@ class MotionTrackingCommand(Command):
     def __init__(self, motion_detector: MotionDetectorType, frame):
         self.motion_detector: MotionDetectorType = motion_detector
         self.frame = frame
-        self.result = False
+        self.result = (False, None, None)
 
     def execute(self):
         contour = self.motion_detector.process_frame(self.frame)
-        self.result = (contour is not None)
+        if contour is not None:
+            cx, cy = self.motion_detector.get_contour_centroid(contour)
+            # store "True" plus the pixel coords
+            self.result = (True, cx, cy)
+        # else result is already (False, None, None) - no need to set it again
 
 
 class DetectionCommand(Command):

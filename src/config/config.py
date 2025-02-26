@@ -26,7 +26,7 @@ MOTION_THRESHOLD = 25  # in pixels
 # calibration config settings:
 CHECKERBOARD_SIZE = (8,6) # actually the number of inner corners in the checkerboard pattern
 SQUARE_SIZE = 25.0 # in mm
-CALIBRATION_FILE = "calibration.json"
+CALIBRATION_FILE = "src/config/calibration.json"
 
 ####################################################################################################
 #~ new code for the server logic

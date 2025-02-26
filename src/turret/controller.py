@@ -38,6 +38,11 @@ class TurretController:
             command = self.command_queue.pop(0)
             command.execute()
 
+    def queue_then_process_commands(self, command: CommandLike):
+        """ queue a command and immediately process the queue """
+        self.queue_command(command)
+        self.process_commands()
+
 
     def enter_interactive_mode(self, show_video: bool = False):
         """ launch the turret in interactive mode, with an optional live video feed and WASD controls """

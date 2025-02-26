@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from src.turret.controller import TurretController
     from src.turret.state import TurretState, IdleState, AimingState, FiringState, CalibrationState, InteractiveState
     from src.turret.operations import TurretOperation
-    from src.turret.targeting import TurretCoordinates, CameraCoordinates, CalibrationParameters
+    from src.turret.targeting import TurretCoordinates, CameraCoordinates, CalibrationParameters, TargetingSystem
     from src.turret.hardware import MotorHatInterface, PowerRelayInterface
     from src.host.tracking import MotionDetector
     from src.host.base_detectors import DetectionFeedback, BaseDetector, SSDDetector, FasterRCNNDetector, RetinaNetDetector #, YOLODetector
@@ -37,10 +37,11 @@ StateLike = Union["TurretState", "IdleState", "AimingState", "FiringState", "Cal
 OperationLike = NewType("OperationLike", "TurretOperation")  # NewType is used to create a distinct type for clarity
 
 TurretControllerType = NewType("TurretControllerType", "TurretController")
-TargetingSystemType = NewType("TargetingSystemType", "TurretController")
+TargetingSystemType = NewType("TargetingSystemType", "TargetingSystem")
 # TODO: after incorporating CameraCoordinates, I should make a CoordinatesLike type alias
 TurretCoordinatesType = NewType("TurretCoordinatesType", "TurretCoordinates")
 CameraCoordinatesType = NewType("CameraCoordinatesType", "CameraCoordinates")
+CoordinatesLike = Union["TurretCoordinates", "CameraCoordinates"]  # Union of both coordinate types
 CalibrationParamsType = NewType("CalibrationParamsType", "CalibrationParameters")
 
 MotorInterfaceType = NewType("MotorInterfaceType"," MotorHatInterface")
@@ -73,6 +74,7 @@ __all__ = [
     "MotorInterfaceType",
     "PowerRelayType",
     "CameraCoordinatesType",
+    "CoordinatesLike",
     "MotionDetectorType",
     "DetectorLike",
     "DetectionFeedbackType",

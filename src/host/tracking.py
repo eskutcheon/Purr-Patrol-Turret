@@ -132,6 +132,16 @@ class MotionDetector:
             return max(contours, key=lambda x: len(x))
         return None
 
+    def get_contour_centroid(self, contour: torch.Tensor) -> Tuple[int, int]:
+        """ given a single contour of shape (N,2), compute centroid (cx, cy)
+        contour[:,0] = row, contour[:,1] = col, if you used (y,x) indexing
+        """
+        if contour is None or len(contour) == 0:
+            return None
+        # if contour is (row, col) => (y, x), compute mean row, mean col
+        mean_y = float(torch.mean(contour[:, 0]))
+        mean_x = float(torch.mean(contour[:, 1]))
+        return mean_x, mean_y
 
     def reset(self):
         """ reset the first frame (e.g., after significant changes in the environment) """

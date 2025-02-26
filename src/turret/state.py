@@ -5,7 +5,7 @@ import contextlib
 from copy import deepcopy
 from threading import Thread
 # local imports
-from ..config.types import TurretControllerType
+from ..config.types import TurretControllerType, DetectionPipelineType, DetectionFeedbackType, MotionDetectorType
 from .command import (
     FireCommand,
     MoveRelativeCommand,
@@ -188,7 +188,7 @@ class MonitoringState(ABC):
 
 class MotionTrackingOnlyState(MonitoringState):
     """ If motion is detected, immediately queue a conditional fire (unless safe mode is on). """
-    def __init__(self, motion_detector):
+    def __init__(self, motion_detector: MotionDetectorType):
         self.motion_detector = motion_detector
         # Make sure we reset for fresh differencing
         self.motion_detector.reset()
@@ -196,19 +196,21 @@ class MotionTrackingOnlyState(MonitoringState):
     def handle_frame(self, control, frame, *args, **kwargs):
         # 1) Create a MotionTrackingCommand to check if there's motion
         track_cmd = MotionTrackingCommand(self.motion_detector, frame)
-        control.queue_command(track_cmd)
-        control.process_commands()
-        if track_cmd.result:
-            # If motion was detected => Fire
-            print("[STATE] MotionOnlyMonitoringState => motion => firing.")
+        control.queue_then_process_commands(track_cmd)
+        found_motion, target_coord = track_cmd.result
+        # ! UPDATE: changed result into a tuple of (bool, float, float) for contour, x, y
+        if found_motion:
+            # If motion was detected, aim to target_coord and fire
+            print("[STATE] MotionTrackingOnlyState => motion => aiming & firing.")
+            aim_cmd = AimCommand(control.operation, control.operation.targeting_system, target_coord)
+            control.queue_then_process_commands(aim_cmd)
             fire_cmd = ConditionalFireCommand(control.operation)
-            control.queue_command(fire_cmd)
-            control.process_commands()
+            control.queue_then_process_commands(fire_cmd)
 
 
 class MotionTrackingDetectionState(MonitoringState):
     """ If motion is detected, run detection. If detection says shoot_flag => aim + fire (unless safe mode is on). """
-    def __init__(self, motion_detector, detection_pipeline):
+    def __init__(self, motion_detector: MotionDetectorType, detection_pipeline: DetectionPipelineType):
         self.motion_detector = motion_detector
         self.detection_pipeline = detection_pipeline
         self.motion_detector.reset()
@@ -216,20 +218,20 @@ class MotionTrackingDetectionState(MonitoringState):
     def handle_frame(self, control, frame, *args, **kwargs):
         # 1) Check for motion
         track_cmd = MotionTrackingCommand(self.motion_detector, frame)
-        control.queue_command(track_cmd)
-        control.process_commands()
-        if track_cmd.result:
+        control.queue_then_process_commands(track_cmd)
+        found_motion, _, _ = track_cmd.result
+        if found_motion:
+            print("[STATE] MotionTrackingDetectionState => motion => running detection.")
             # 2) If motion => run detection
             detect_cmd = DetectionCommand(self.detection_pipeline, frame)
-            control.queue_command(detect_cmd)
-            control.process_commands()
+            control.queue_then_process_commands(detect_cmd)
+            results: DetectionFeedbackType = detect_cmd.result
             # 3) If detection says "shoot", aim then fire (when safe mode is off)
-            if detect_cmd.result and any(detect_cmd.result.shoot_flag):
+            if results and any(results.shoot_flag):
+                print("[STATE] MotionTrackingDetectionState => detection => aiming & firing.")
                 # NOTE: detection returns center in pixel coords
-                target_coord = detect_cmd.result.resolve_target()
+                target_coord = results.resolve_target()
                 aim_cmd = AimCommand(control.operation, control.operation.targeting_system, target_coord)
-                control.queue_command(aim_cmd)
-                control.process_commands()
+                control.queue_then_process_commands(aim_cmd)
                 fire_cmd = ConditionalFireCommand(control.operation)
-                control.queue_command(fire_cmd)
-                control.process_commands()
+                control.queue_then_process_commands(fire_cmd)

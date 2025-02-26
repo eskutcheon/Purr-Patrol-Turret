@@ -1,7 +1,6 @@
+# Derivation of Camera Parameters
 
-
-
-# Raspberry Pi Camera V2 Specs
+### Raspberry Pi Camera V2 Specs
 
 ![Camera Dimensions:](../assets/RPi-Camera-V2-size.jpg)
 
@@ -36,7 +35,7 @@ $$f_x = \frac{f}{p_x}, \quad f_y = \frac{f}{p_y}$$
 	- for a focal/principal point assumedly at the center of the sensor, given resolution (W, H),
 $$c_x = \left\lfloor\frac{W}{2}\right\rfloor, \quad c_y = \left\lfloor\frac{H}{2}\right\rfloor$$
 - $\gamma$ is the skew parameter
-	- typically 0 for square pixels, as in the case of the IMX219 sensor
+	- typically 0 for square pixels, as in the case of the IMX219 sensor, so:
 	$$\gamma = 0$$
 Given
 - focal length $f = 3.04$ mm
@@ -47,7 +46,7 @@ $$K = \begin{bmatrix}
     2714.286 & 0 & 1640 \\
     0 & 2714.286 & 1232 \\
     0 & 0 & 1
-\end{bmatrix}$$
+\end{bmatrix}.$$
 We also have field of view provided above, henceforth called
 $$\theta_{x} = 62.2^{\degree}, \quad \theta_{y} = 48.8^{\degree}$$
 
