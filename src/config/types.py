@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from src.turret.operations import TurretOperator
     from src.turret.targeting import TurretCoordinates, CameraCoordinates, CalibrationParameters, TargetingSystem
     from src.turret.hardware import MotorHatInterface, PowerRelayInterface
-    from src.host.tracking import MotionDetector
+    from src.host.tracking import MotionDetector, MotionDetectionFeedback
     from src.host.base_detectors import DetectionFeedback, BaseDetector, SSDDetector, FasterRCNNDetector, RetinaNetDetector #, YOLODetector
     from src.host.detection import DetectionPipeline
     from src.rpi.camera import CameraFeed
@@ -48,6 +48,7 @@ MotorInterfaceType = NewType("MotorInterfaceType"," MotorHatInterface")
 PowerRelayType = NewType("PowerRelayType", "PowerRelayInterface")
 
 MotionDetectorType = NewType("MotionDetectorType", "MotionDetector")
+MotionFeedbackType = NewType("MotionFeedbackType", "MotionDetectionFeedback")  # NewType is used to create a distinct type for clarity
 DetectorLike = Union["BaseDetector", "SSDDetector", "FasterRCNNDetector", "RetinaNetDetector"]  #, YOLODetector]"
 DetectionFeedbackType = NewType("DetectionFeedbackType", "DetectionFeedback")
 DetectionPipelineType = NewType("DetectionPipelineType", "DetectionPipeline")

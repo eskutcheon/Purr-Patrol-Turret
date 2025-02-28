@@ -1,4 +1,5 @@
 from typing import Tuple, List, Union, Dict, Optional, Set
+import numpy as np
 import torch
 import torchvision as TV
 # local imports
@@ -33,7 +34,7 @@ class DetectionPipeline:
         detector: DetectorLike,
         overlap_threshold: float = 0.1,
         animal_labels: Optional[List[str]] = None,
-        plant_labels: Optional[Union[List[str], str]] = None
+        plant_labels: Optional[Union[List[str], str]] = None,
     ):
         self.detector = detector
         # Optionally store label maps or overlap thresholds
@@ -43,17 +44,20 @@ class DetectionPipeline:
         self.plant_labels = sanitize_label_inputs(plant_labels, ["potted plant", "vase", "bowl"])
         self.plant_ids = [self.detector.classes.index(label) for label in self.plant_labels]
 
-    def run_detection(self, frame: torch.Tensor) -> DetectionFeedback:
+    def run_detection(self, frame: Union[np.ndarray, torch.Tensor]) -> DetectionFeedback:
         """ run the detection pipeline on a single frame:
             1) Run bounding-box detection
             2) Group boxes by label
             3) Check for overlap (e.g. animal vs plant)
             4) Return a comprehensive DetectionFeedback object
         """
-        def debug_results(nms_results: DetectionResult):
-            label_list = [self.detector.classes[int(label.item())] for label in nms_results.labels]
-            view_boxes(frame, nms_results.boxes, label_list)
+        # def debug_results(nms_results: DetectionResult):
+        #     label_list = [self.detector.classes[int(label.item())] for label in nms_results.labels]
+        #     view_boxes(frame, nms_results.boxes, label_list)
         # results is a dictionary of each detected object’s bounding box, label, and score
+        if not isinstance(frame, torch.Tensor):
+            frame = torch.from_numpy(frame).permute(2, 0, 1) if isinstance(frame, np.ndarray) else torch.stack(frame)
+            frame = frame.to(device = self.detector.device)
         results = self.detector.detect(frame)
         # if no boxes, return empty feedback
         if results.boxes.shape[0] == 0:

@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Union, List, Tuple
+import numpy as np
 # local imports
 from src.turret.targeting import CameraCoordinates
 from src.config.types import (
     OperatorLike,
     TargetingSystemType,
     MotionDetectorType,
+    MotionFeedbackType,
     DetectionPipelineType,
     DetectionFeedbackType,
     CoordinatesLike
@@ -119,16 +121,15 @@ class ConditionalFireCommand(Command):
 
 class MotionTrackingCommand(Command):
     """ Runs motion detection on a single frame. result=True if motion found """
-    # TODO: add type annotation for frame - might make a new np.ndarray type for this
-    def __init__(self, motion_detector: MotionDetectorType, frame):
+    def __init__(self, motion_detector: MotionDetectorType, frame: np.ndarray):
         self.motion_detector: MotionDetectorType = motion_detector
         self.frame = frame
         self.result = (False, (None, None))
 
     def execute(self):
-        contour = self.motion_detector.process_frame(self.frame)
-        if contour is not None:
-            cx, cy = self.motion_detector.get_contour_centroid(contour)
+        feedback: MotionFeedbackType = self.motion_detector.process_frame(self.frame)
+        if feedback.motion_detected:
+            cx, cy = feedback.centroid
             # store "True" plus the pixel coords
             self.result = (True, (cx, cy))
         # else result is already (False, None, None) - no need to set it again
@@ -136,13 +137,11 @@ class MotionTrackingCommand(Command):
 
 class DetectionCommand(Command):
     """ Command that runs detection on a given frame or frame_id, sets an attribute on the operation or returns feedback in some queue """
-    # TODO: add type annotation for frame - might make a new np.ndarray type for this
-    def __init__(self, detection_pipeline: DetectionPipelineType, frame):
+    def __init__(self, detection_pipeline: DetectionPipelineType, frame: np.ndarray):
         self.detection_pipeline = detection_pipeline
         self.frame = frame
         self.result = None
 
     def execute(self):
-        # TODO: figure out needed preprocessing here - may just want to ensure it's a tensor in the detection pipeline constructor
-        feedback: DetectionFeedbackType = self.detection_pipeline.run_detection(self.frame)
+        self.result: DetectionFeedbackType = self.detection_pipeline.run_detection(self.frame)
         # store or return in some shared object or (MAYBE) pass it to some callback function

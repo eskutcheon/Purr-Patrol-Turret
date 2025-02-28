@@ -23,7 +23,8 @@ MOTOR_Y_REVERSED = False
 FOCAL_LENGTH = (1, 1)
 
 # tracking and detection config settings:
-MOTION_THRESHOLD = 25  # in pixels
+MOTION_THRESHOLD = 0.5  # in pixels
+MOTION_UPDATE_INTERVAL = 10  # in seconds
 
 
 # calibration config settings:

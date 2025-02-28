@@ -12,6 +12,7 @@ class TurretController:
     def __init__(self, operation: OperatorLike) -> TurretControllerType:
         self.operation = operation
         self.targeting_system = operation.targeting_system
+        self.update_interval = cfg.MOTION_UPDATE_INTERVAL
         # TODO: integrate a "friendly" state object here that can't be overridden to avoid misfires
         self.current_state = IdleState()  # Start in Idle state
         self.command_queue: List[CommandLike] = []          # Queue for commands
@@ -89,21 +90,17 @@ class TurretController:
         # Create the specialized state:
         new_state = MotionTrackingOnlyState(motion_detector)
         self.set_state(new_state)
-        print("created motion tracker and its state - adding a wait to see GPU allocation at this point")
-        time.sleep(5)
         # Open camera feed in the controller
         with CameraFeed(camera_port=cfg.CAMERA_PORT, max_dim_length=720) as feed:
             # Possibly a loop that checks user input to break:
             while True:
                 frame = feed.capture_frame()
-                print("debugging: frame captured")
                 # Pass the frame to the current state’s handle_frame method
                 self.handle_state(frame=frame)
-                print("debugging: frame passed to state - waiting for 5 seconds to see GPU allocation")
-                time.sleep(5)
                 # allow pressing 'q' to exit:
                 if feed.keypress_monitor():
                     break
+                time.sleep(self.update_interval) # only check every 10 seconds to reduce computational load
         # return to idle afterwards
         self.set_state(IdleState())
         self.handle_state()
@@ -136,7 +133,7 @@ class TurretController:
                 # allow pressing 'q' to exit:
                 if feed.keypress_monitor():
                     break
-                time.sleep(10) # only check every 10 seconds to avoid overloading the GPU
+                time.sleep(self.update_interval) # only check every 10 seconds to reduce computational load
         # Return to idle afterwards
         self.set_state(IdleState())
         self.handle_state()

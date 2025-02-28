@@ -102,8 +102,6 @@ class CameraCalibrator:
         # ])
         #Compute omega using Cholesky decomposition
         try:
-            #omega = np.linalg.solve(V.T @ V, np.eye(V.shape[1]))
-            #omega = np.linalg.cholesky(V.T @ V)
             U, S, Vt = np.linalg.svd(V.T @ V, full_matrices=False)
             omega = Vt.T @ np.diag(1 / S) @ U.T  # Pseudo-inverse
         except np.linalg.LinAlgError:
@@ -113,15 +111,10 @@ class CameraCalibrator:
             U, S, Vt = np.linalg.svd(V.T @ V + 1e-6 * np.eye(V.shape[1]), full_matrices=False)
             omega = Vt.T @ np.diag(1 / S) @ U.T  # Pseudo-inverse
         v0 = stable_division(omega[0, 1] * omega[0, 2] - omega[0, 0] * omega[1, 2], omega[0, 0] * omega[1, 1] - omega[0, 1] ** 2)
-        #v0 = (omega[0, 1] * omega[0, 2] - omega[0, 0] * omega[1, 2]) / (omega[0, 0] * omega[1, 1] - omega[0, 1] ** 2)
         lambda_ = omega[2, 2] - stable_division(omega[0, 2] ** 2 + v0 * (omega[0, 1] * omega[0, 2] - omega[0, 0] * omega[1, 2]), omega[0, 0])
-        #lambda_ = omega[2, 2] - ((omega[0, 2] ** 2 + v0 * (omega[0, 1] * omega[0, 2] - omega[0, 0] * omega[1, 2])) / omega[0, 0])
         alpha = np.sqrt(stable_division(lambda_, omega[0, 0]))
-        #alpha = np.sqrt(lambda_ / omega[0, 0])
         beta = np.sqrt(stable_division(lambda_ * omega[0, 0], omega[0, 0] * omega[1, 1] - omega[0, 1] ** 2))
-        #beta = np.sqrt(lambda_ * omega[0, 0] / (omega[0, 0] * omega[1, 1] - omega[0, 1] ** 2))
         gamma = stable_division(-(omega[0, 1] * (alpha ** 2) * beta), lambda_)
-        #gamma = -1 * (omega[0, 1] * (alpha ** 2) * beta) / lambda_
         u0 = stable_division(gamma * v0, beta) - stable_division(omega[0, 2] * (alpha ** 2), lambda_)
         #u0 = (gamma * v0 / beta) - (omega[0, 2] * (alpha ** 2) / lambda_)
         self.K = np.array([[alpha, gamma, u0], [0, beta, v0], [0, 0, 1]])

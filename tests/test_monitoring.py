@@ -21,4 +21,5 @@ def test_object_detection_default():
 
 
 if __name__ == "__main__":
-    test_motion_tracking_default()
+    #test_motion_tracking_default()
+    test_object_detection_default()

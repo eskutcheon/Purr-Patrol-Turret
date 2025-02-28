@@ -88,10 +88,10 @@ class BaseDetector(ABC):
 class SSDDetector(BaseDetector):
     """ bounding-box detector using a PyTorch SSDLite320_MobileNet_V3_Large model """
     def __init__(self, score_threshold: float = 0.1, device="cuda"):
-        device = device if device == "cuda" and torch.cuda.is_available() else "cpu"
+        self.device = device if device == "cuda" and torch.cuda.is_available() else "cpu"
         weights = TV.models.detection.SSDLite320_MobileNet_V3_Large_Weights.DEFAULT
         self.model = TV.models.detection.ssdlite320_mobilenet_v3_large(weights=weights)
-        self.model.to(device=device)
+        self.model.to(device=self.device)
         self.model.eval()
         # Store metadata for label mapping
         self.classes = weights.meta["categories"]
@@ -117,10 +117,10 @@ class SSDDetector(BaseDetector):
 
 class FasterRCNNDetector(BaseDetector):
     def __init__(self, score_threshold: float = 0.1, device="cuda"):
-        device = device if device == "cuda" and torch.cuda.is_available() else "cpu"
+        self.device = device if device == "cuda" and torch.cuda.is_available() else "cpu"
         weights = TV.models.detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT
         self.model = TV.models.detection.fasterrcnn_resnet50_fpn(weights=weights)
-        self.model.to(device=device)
+        self.model.to(device=self.device)
         self.model.eval()
         # NOTE: animal classes: 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe'
         self.classes = weights.meta["categories"]
@@ -151,10 +151,10 @@ class FasterRCNNDetector(BaseDetector):
 
 class RetinaNetDetector(BaseDetector):
     def __init__(self, score_threshold: float = 0.1, device="cuda"):
-        device = device if device == "cuda" and torch.cuda.is_available() else "cpu"
+        self.device = device if device == "cuda" and torch.cuda.is_available() else "cpu"
         weights = TV.models.detection.RetinaNet_ResNet50_FPN_Weights.DEFAULT
         self.model = TV.models.detection.retinanet_resnet50_fpn(weights=weights)
-        self.model.to(device=device)
+        self.model.to(device=self.device)
         self.model.eval()
         self.classes = weights.meta["categories"]
         self.score_threshold = score_threshold

@@ -1,163 +1,173 @@
-"""
-- Handles motion detection on incoming frames.
-
-detect_motion(frame): Detects motion using frame differencing or other techniques.
-prepare_for_targeting(): Signals the Pi to prepare the turret for targeting.
-"""
-
-
 from typing import Union, Optional, Tuple, List
-import sys
-#import cv2
+from dataclasses import dataclass
 import numpy as np
-import torch
-import torchvision.transforms.v2 as TT
-import torch.nn.functional as F
-import kornia.morphology as KM
+from skimage import filters, morphology, measure, color
 
 
-
-def to_cuda(img: Union[torch.Tensor, np.ndarray]) -> torch.Tensor:
-    if not issubclass(type(img), torch.Tensor):
-        try:
-            img = torch.from_numpy(img).permute(2, 0, 1).detach() #TT.ToTensor()(img)
-        except Exception as e:
-            raise ValueError(f"Failed to convert image with type {type(img)} to tensor: {e}")
-    if not img.is_cuda:
-        img = img.to(device="cuda")
-    return img
+@dataclass
+class MotionDetectionFeedback:
+    motion_detected: bool
+    contour: np.ndarray  # shape [N, 2] or None
+    centroid: tuple      # (x, y) or None
 
 
-
-@torch.jit.script
-def get_connectivity_kernel(kernel_size: int, max_distance: int) -> torch.Tensor:
-    """ Create a connectivity kernel based on Manhattan distances.
-        :param kernel_size: Size of the square kernel (must be odd).
-        :param manhattan_distance: Maximum Manhattan distance to include neighbors.
-        :return: A kernel of shape (1, 1, kernel_size, kernel_size) with 1s for neighbors.
-    """
-    assert kernel_size % 2 == 1, "Kernel size must be odd."
-    center = kernel_size // 2
-    # create grid of Manhattan distances
-    grid_x, grid_y = torch.meshgrid(torch.arange(kernel_size), torch.arange(kernel_size), indexing="ij")
-    manhattan_distances = torch.abs(grid_x - center) + torch.abs(grid_y - center)
-    # generate the kernel: 1 for neighbors within the distance, 0 otherwise
-    kernel = (manhattan_distances <= max_distance).int()
-    # remove the center pixel (not part of the neighbors)
-    kernel[center, center] = 0
-    return kernel.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
+def debug_value_histogram(arr: np.ndarray, num_bins: int = 100, top_n: int = 10):
+    if top_n > num_bins:
+        raise ValueError("top_n must be less than or equal to num_bins")
+    hist, bin_edges = np.histogram(arr, bins=num_bins)
+    largest_bins = sorted(enumerate(hist), key=lambda x: x[1], reverse=True)[:top_n]
+    # NOTE: values returned above are (bin_index, count), so we need to convert to (bin_range, count)
+    largest_bins = list(map(lambda pair: ((round(float(bin_edges[pair[0]]), 3),
+                                            round(float(bin_edges[pair[0] + 1]), 3)),
+                                          int(pair[1])), largest_bins))
+    return largest_bins
 
 
-@torch.jit.script
-def connected_components(tensor: torch.ByteTensor, kernel: torch.Tensor) -> Tuple[torch.Tensor, int]:
-    """ Label connected components in a binary tensor with vectorized flood filling
-        :param tensor: Binary tensor of shape (H, W) with 1s for foreground
-        :return: Label tensor (where each connected component has a label) and the number of labels (components)
-    """
-    # NOTE: The original function had a safeguard to ensure the tensor was 2D, but torch uses empty batch dimensions like (1,H,W) for grayscale images
-    labeled = torch.zeros_like(tensor, dtype=torch.int32)
-    current_label = 0
-    # initialize kernel to find 4-connected neighbors (NOTE: there may be a native kornia function for this)
-    # kernel = torch.tensor([[0, 1, 0],
-    #                        [1, 0, 1],
-    #                        [0, 1, 0]], dtype=torch.uint8, device=tensor.device).unsqueeze(0).unsqueeze(0)
-    # vectorized region labeling - flood fill until no unlabeled foreground pixels remain
-    while tensor.any():
-        # use first unlabeled foreground pixel as the seed for the next region
-        seed = torch.nonzero(tensor == 1)[0:1]
-        current_label += 1
-        # create mask for the connected region
-        region = torch.zeros_like(tensor)
-        region[seed[:, 0], seed[:, 1]] = 1
-        # flood fill using convolution
-        while True:
-            dilated = torch.conv2d(region.float(), kernel.float(), padding=1)
-            dilated = (dilated > 0).byte() & tensor
-            if torch.allclose(dilated, region, rtol=1e-4, atol=1e-6):
-                break
-            region = dilated
-        # label the current region with the current label
-        labeled[region.to(dtype=torch.bool)] = current_label
-        # remove most recent labeled region from the original tensor for the loop termination condition
-        tensor[region.to(dtype=torch.bool)] = 0
-    return labeled, current_label
-
-@torch.jit.script
-def find_contours(thresh_mask: torch.ByteTensor, kernel: torch.Tensor, min_area: int = 5000):
-    """ Extract contours from a binary mask tensor - updated from using cv2.findContours to pure PyTorch
-        :param thresh_mask: Input binary mask (1 for foreground, 0 for background) of shape (H, W).
-        :param min_area: Minimum contour area to include.
-        :return: List of tensors containing the indices for each contour.
-    """
-    # label connected components
-    labeled, num_labels = connected_components(thresh_mask, kernel)
-    # labeled, num_labels = connected_components(thresh_mask.pin_memory().cpu(), kernel.cpu())  # Process on CPU
-    # extract contours for each label and save the contour indices
-    contours = []
-    for label in range(1, num_labels + 1):  # skip label 0 (background)
-        mask = labeled == label
-        if mask.sum().item() >= min_area:  # filter small regions
-            # get boundary indices
-            boundary = torch.logical_xor(mask, F.max_pool2d(mask.float(), kernel_size=3, stride=1, padding=1).to(dtype=torch.bool))
-            # append contour indices to the list of contours
-            #contours.append(boundary.nonzero().cpu())
-            contours.append(boundary.nonzero())
-    return contours
+#def update_dynamic_alpha(stddev, lo = 0.001, hi = 0.5) -> float:
+def update_dynamic_alpha(stddev, slope=1.0, offset=0.0, lo = 0.001, hi = 0.1) -> float:
+    """ naive method to adapt alpha based on current difference distribution """
+    #~ might update this to use a nonlinear smoothing function like sigmoid later
+    # new_alpha = 0.1 / (stddev + lo)
+    # new_alpha = np.clip(new_alpha, lo, hi)
+    # return float(new_alpha)
+    # If 'std_val' is small => alpha near top plateau. If 'std_val' is large => alpha near bottom plateau.
+    x = slope * (stddev - offset)
+    sigma = 1.0 / (1.0 + np.exp(-x))  # standard logistic
+    return lo + (hi - lo) * sigma
 
 
-
+#~ UPDATE: saying screw it and running this on CPU
 class MotionDetector:
-    def __init__(self, threshold=25, blur_size=(21, 21), min_contour_area=5000, device="cuda"):
-        self.threshold = threshold
-        # TODO: need to set this dynamically based on image sizes
-        self.min_contour_area = min_contour_area
-        self.kernel: torch.Tensor = get_connectivity_kernel(3, 1).to(device=device)  # 3x3 kernel for 4-connected neighbors
-        self.first_frame = None
-        self.preprocessor = TT.Compose([
-            TT.Lambda(to_cuda) if device == "cuda" else TT.Lambda(lambda img: img),
-            TT.Grayscale(num_output_channels=1),
-            TT.GaussianBlur(blur_size, sigma=3.5) # 3.5 = what the original code's sigma came out to be with k=21 in cv2.GaussianBlur
-        ])
+    def __init__(self,
+                 threshold: float = 0.5,
+                 alpha_init: float = 0.01,
+                 morph_disk_radius: int = 3):
+        self.diff_threshold = threshold
+        self.alpha = alpha_init
+        self.foreground_threshold = 10
+        self.running_std = 0.1  # arbitrary start; adjust as needed
+        # morphological structuring element for opening/closing; can also use `morphology.square`
+        self.struct_elem = morphology.disk(morph_disk_radius)
+        self.background = None
+        self.frame_count = 0
 
-    def process_frame(self, frame):
-        """ process a frame (hypothetically from the RPi camera feed) to detect motion """
-        # img frame passed by default as a numpy array of shape (480, 640, 3)
-        img: torch.Tensor = self.preprocessor(frame) # np.ndarray => torch.Tensor of shape (1, 480, 640)
-        # initialize the first frame
-        if self.first_frame is None:
-            self.first_frame = img.clone()
+    def _update_background(self, current_frame: np.ndarray) -> None:
+        """ updates the running-average background image combination in-place """
+        # compute difference for dynamic alpha
+        diff = np.abs(current_frame - self.background)
+        # updating running std with 90/10 rule
+        self.running_std = 0.9 * self.running_std + 0.1 * diff.std()
+        self.alpha = update_dynamic_alpha(self.running_std)
+        # running average update
+        self.background = (1 - self.alpha)*self.background + self.alpha*current_frame
+
+    def _preprocess_frame(self, frame: np.ndarray) -> np.ndarray:
+        """ preprocess the input frame by scaling, converting to grayscale then blurring """
+        frame_processed = frame.astype(np.float32)/255.0  # scale to [0..1]
+        frame_processed = color.rgb2gray(frame_processed)  # convert to grayscale
+        frame_processed = filters.gaussian(frame_processed, sigma=2.0)  # apply Gaussian blur
+        return frame_processed
+
+    def _get_largest_region(self, labeled: np.ndarray) -> Union[List['measure.RegionProperties'], None]:
+        """ returns the RegionProperties of the largest connected region by area, or None """
+        if labeled.max() < 1:
+            # no labeled regions implies no motion
             return None
-        # compute the absolute difference between the current frame and the first frame
-        frame_delta = torch.abs(self.first_frame - img)
-        # threshold the difference and convert to uint8
-        mask = (frame_delta > self.threshold).unsqueeze(0) #.byte()
-        # # 'opening' = erosion followed by dilation => remove noise
-        mask = KM.opening(mask, self.kernel)
-        # # 'closing' = dilation followed by erosion => fill holes
-        mask = KM.closing(mask, self.kernel)
-        # get list of contour indices for the current frame
-        # contours = find_contours(mask, self.kernel, min_area=self.min_contour_area)
-        # # return largest contour
-        # if contours:
-        #     del mask, self.first_frame
-        #     torch.cuda.empty_cache()
-        #     self.first_frame = img  # reset the first frame to the current frame
-        #     return max(contours, key=lambda x: len(x))
-        # TODO: need to set a timer of some sort to update the first frame after a certain amount of time has passed, whether motion was detected or not
-        return None
+        # find the largest labeled regions based on area (number of pixels in region) using regionprops
+        regions = measure.regionprops(labeled)
+        if not regions:
+            return None
+        largest_region = None
+        max_area = 0
+        # sequential search for largest region by area
+        for r in regions:
+            # NOTE: regionprops does lazy evaluation of properties
+            if r.area > max_area:
+                max_area = r.area
+                largest_region = r
+        #print(f"[DEBUGGING] largest region area: {max_area}")
+        return largest_region
 
-    def get_contour_centroid(self, contour: torch.Tensor) -> Tuple[int, int]:
+    def _get_largest_contour(self, mask: np.ndarray) -> Tuple[Union[np.ndarray, None], Union['measure.RegionProperties', None]]:
+        """ Label the mask, find the largest region, and use extract its largest contour
+            Returns:
+                largest_contour, -> np.ndarray of shape [N,2] or None
+                largest_region   -> RegionProperties or None
+        """
+        labeled = measure.label(mask, connectivity=2)
+        largest_region = self._get_largest_region(labeled)
+        if largest_region is None:
+            return (None, None)
+        # NOTE: find_contours returns a list of contours, each of which is a list of points (x,y) in the contour
+        #       so we need to find the largest contour by length and return it as a numpy array of shape (N,2)
+        region_mask = (labeled == largest_region.label).astype(np.float32)
+        contours = measure.find_contours(region_mask, 0.5)
+        if not contours:
+            return (None, largest_region)
+        # if there are multiple contours for the region, pick the largest in length
+        largest_contour = None
+        largest_contour_length = 0
+        for c in contours:
+            # c is shape [N, 2] and each row is (row, col)
+            if len(c) > largest_contour_length:
+                largest_contour_length = len(c)
+                largest_contour = c
+        return (largest_contour, largest_region)
+
+    def _get_negative_detection(self) -> MotionDetectionFeedback:
+        return MotionDetectionFeedback(motion_detected=False, contour=None, centroid=None)
+
+    def process_frame(self, frame: np.ndarray) -> MotionDetectionFeedback:
+        """ process a frame (hypothetically from the RPi camera feed) to detect motion """
+        self.frame_count += 1
+        # img frame passed by default as a numpy array of shape (480, 640, 3)
+        img: np.ndarray = self._preprocess_frame(frame) # now np.ndarray of shape (480, 640)
+        print(f"[MotionDetector] Processing frame {self.frame_count}")
+        debug_bin_count = 5
+        #print(f"[DEBUGGING] img top {debug_bin_count} histogram pairs (value, count):\n\t{debug_value_histogram(img, top_n=debug_bin_count)}")
+        if self.background is None:
+            self.background = img
+            return self._get_negative_detection()
+        if self.frame_count % 1 == 0:
+            # update the background every 5 minutes (assuming 10 second delay in frame capture)
+            self._update_background(img)
+        #print("[DEBUGGING] current alpha value: ", self.alpha)
+        #print(f"[DEBUGGING] background top {debug_bin_count} histogram pairs (value, count):\n\t{debug_value_histogram(self.background, top_n=debug_bin_count)}")
+        # create motion mask by thresholding the difference
+        diff = np.abs(img - self.background)
+        #print(f"[DEBUGGING] diff top {debug_bin_count} histogram pairs (value, count):\n\t{debug_value_histogram(self.background, top_n=debug_bin_count)}")
+        # convert boolean thresholded mask to bytes (0/1) for morphological operations
+        motion_mask = (diff > self.diff_threshold).astype(np.uint8)
+        # morphological cleanup using opening to remove small noise
+        # TODO: determine if closing is necessary and whether any morphological ops are necessary to begin with
+        motion_mask = morphology.opening(motion_mask, self.struct_elem)
+        # motion_mask = morphology.closing(motion_mask, self.struct_elem)
+        # check if motion_mask is basically empty based on the sum of foreground pixels (ones)
+        if motion_mask.sum() < self.foreground_threshold:
+            return self._get_negative_detection()
+        # label connected components and find the largest contour among the labeled regions
+        # FIXME: resolve arguments
+        largest_contour, largest_region = self._get_largest_contour(motion_mask)
+        if largest_contour is None or largest_region is None:
+            return self._get_negative_detection()
+        centroid = self._get_contour_centroid(largest_region)  # (x, y) in pixel coords
+        # return the final (non-empty) detection result
+        return MotionDetectionFeedback(
+            motion_detected=True,
+            contour=largest_contour,    # shape [N,2], in (row,col) format
+            centroid=centroid           # (x,y)
+        )
+
+    def _get_contour_centroid(self, largest_region: 'measure.RegionProperties') -> Tuple[int, int]:
         """ given a single contour of shape (N,2), compute centroid (cx, cy)
             contour[:,0] = row, contour[:,1] = col, if you used (y,x) indexing
         """
-        # called by MotionTrackingCommand.execute() to get the centroid of the largest contour
-        if contour is None or len(contour) == 0:
-            return None
-        # if contour is (row, col) => (y, x), compute mean row, mean col
-        mean_y = float(torch.mean(contour[:, 0]))
-        mean_x = float(torch.mean(contour[:, 1]))
-        return mean_x, mean_y
+        # calculate a centroid from the largest region (lazy evaluation of regionprops)
+        centroid = largest_region.centroid  # (row, col) indexing format
+        # regionprops's `centroid` is (row, col), so swap to (x, y) format
+        return (centroid[1], centroid[0])  # (x, y) coordinate format
 
     def reset(self):
-        """ reset the first frame (e.g., after significant changes in the environment) """
-        self.first_frame = None
+        """ reset the background running average (e.g., after significant changes in the environment) """
+        self.background = None
+        self.frame_count = 0

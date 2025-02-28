@@ -226,16 +226,16 @@ class MotionTrackingOnlyState(MonitoringState):
         # 1) Create a MotionTrackingCommand to check if there's motion
         track_cmd = MotionTrackingCommand(self.motion_detector, frame)
         control.queue_then_process_commands(track_cmd)
+        # result for MotionTrackingCommand is a tuple of (found_motion: bool, target_coord: Union[CoordinatesLike, tuple])
         found_motion, target_coord = track_cmd.result
-        # ! UPDATE: changed result into a tuple of (bool, float, float) for contour, x, y
         if found_motion:
             # If motion was detected, aim to target_coord and fire
-            print("[STATE] MotionTrackingOnlyState => motion => aiming & firing.")
+            print("[STATE] MotionTrackingOnlyState => motion => aiming & firing")
             aim_cmd = AimCommand(control.operation, control.operation.targeting_system, target_coord)
-            #control.queue_then_process_commands(aim_cmd)
             fire_cmd = ConditionalFireCommand(control.operation)
-            #control.queue_then_process_commands(fire_cmd)
             control.queue_then_process_commands(aim_cmd, fire_cmd)
+            # clear background and reset motion detector for next frame (otherwise it'll likely fire back to back)
+            self.motion_detector.reset()
 
 
 class MotionTrackingDetectionState(MonitoringState):
@@ -246,23 +246,23 @@ class MotionTrackingDetectionState(MonitoringState):
         self.motion_detector.reset()
 
     def handle_frame(self, control, frame, *args, **kwargs):
-        # 1) Check for motion
+        # check for motion
         track_cmd = MotionTrackingCommand(self.motion_detector, frame)
         control.queue_then_process_commands(track_cmd)
         found_motion, _ = track_cmd.result
         if found_motion:
-            print("[STATE] MotionTrackingDetectionState => motion => running detection.")
-            # 2) If motion => run detection
+            print("[STATE] MotionTrackingDetectionState => motion => running detection")
+            # if motion was detected, run object detection for specific classes
             detect_cmd = DetectionCommand(self.detection_pipeline, frame)
             control.queue_then_process_commands(detect_cmd)
             results: DetectionFeedbackType = detect_cmd.result
-            # 3) If detection says "shoot", aim then fire (when safe mode is off)
+            # if detection says "shoot", aim then fire (when safe mode is off)
             if results and any(results.shoot_flag):
-                print("[STATE] MotionTrackingDetectionState => detection => aiming & firing.")
+                print("[STATE] MotionTrackingDetectionState => detection => aiming & firing")
                 # NOTE: detection returns center in pixel coords
                 target_coord = results.resolve_target()
                 aim_cmd = AimCommand(control.operation, control.operation.targeting_system, target_coord)
-                #control.queue_then_process_commands(aim_cmd)
                 fire_cmd = ConditionalFireCommand(control.operation)
-                #control.queue_then_process_commands(fire_cmd)
                 control.queue_then_process_commands(aim_cmd, fire_cmd)
+                # clear background and reset motion detector for next frame (otherwise it'll likely fire back to back)
+                self.motion_detector.reset()
