@@ -1,7 +1,7 @@
 import os, sys
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')))
 
-from src.turret.operations import TurretOperation
+from src.turret.operations import TurretOperator
 from src.turret.targeting import TargetingSystem, TurretCoordinates #, CalibrationParameters
 from src.turret.command import AimCommand
 
@@ -11,7 +11,7 @@ def test_integration_aim_command_live():
     #cal_params = CalibrationParameters(focal_length=[1.0, 200.0])
     targeting_system = TargetingSystem()
     current_pos = TurretCoordinates(0,0,0,0)
-    op = TurretOperation(relay_pin=4, interactive=False)
+    op = TurretOperator(relay_pin=4, interactive=False)
     #cmd = AimCommand(op, targeting_system, current_pos, (0.8,-0.4))
     cmd = AimCommand(op, targeting_system, (0.8,-0.4))
     cmd.execute()

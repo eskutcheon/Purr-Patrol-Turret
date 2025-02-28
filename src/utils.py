@@ -2,7 +2,6 @@ import time
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
-import torchvision as TV
 from typing import Union, List, Dict, Callable, Tuple
 
 
@@ -15,8 +14,9 @@ def get_user_confirmation(prompt):
 
 
 def view_boxes(img, box_coords, labels, target=None, dest_path=None):
+    from torchvision.utils import draw_bounding_boxes
     # TODO: need to update this to take an arbitrary number of box_coords, reference labels from a global dictionary, and pick colors randomly
-    img_marked = TV.utils.draw_bounding_boxes(img, box_coords, labels=labels, width=2) #, colors=['red', 'green'])
+    img_marked = draw_bounding_boxes(img, box_coords, labels=labels, width=2) #, colors=['red', 'green'])
     img_marked = img_marked.numpy().transpose([1,2,0]) # ndarray objects expect the channel dim to be the last one
     fig, ax = plt.subplots()
     ax.imshow(img_marked)
@@ -95,9 +95,9 @@ def get_scaled_dims(input_shape: Tuple[int, int], max_size: int) -> Tuple[int, i
     long_dim = max(H, W)
     if long_dim > max_size:
         scale = max_size / float(long_dim)
-        H = int(H * scale)
-        W = int(W * scale)
-    return H, W
+        H *= scale
+        W *= scale
+    return int(H), int(W)
 
 
 #######################################################################################################################

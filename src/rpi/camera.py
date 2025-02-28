@@ -87,14 +87,12 @@ class CameraFeed:
                 frame = self.capture_frame()
                 self.last_frame = frame  # store the last frame for external access
                 cv2.imshow(window_name, frame)
-                # keypress = cv2.waitKey(int(1000 / fps)) & 0xFF
-                # if keypress == ord('q'): # checking for a q key press every 100 ms to break the video loop
-                #     break
-                # if key_handler is not None and keypress != 255:
-                #     # pass the key to your external logic (spacebar, etc.)
-                #     key_handler(keypress)
-                # time.sleep(0.1)
                 break_flag = self.keypress_monitor(fps=fps, key_handler=key_handler)
+                # TODO: need to add handling of KeyboardInterrupt being raised in other threads to exit then
+                #~ IDEA: create threading.Thread subclass that allows interruptions by setting a shared flag to True
+                #~ IDEA: use a queue to send messages from the main thread to the camera thread to break the loop
+                    # would allow for more complex logic to be passed in, e.g. "stop the feed if motion is detected"
+                    # and would allow passing keypresses from other threads to the camera thread in the case of calibration
                 if break_flag:
                     break
             self._close_feed()

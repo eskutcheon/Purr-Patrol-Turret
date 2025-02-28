@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from src.turret.command import Command, MoveCommand, MoveRelativeCommand, FireCommand, AimCommand, StopCommand
     from src.turret.controller import TurretController
     from src.turret.state import TurretState, IdleState, AimingState, FiringState, CalibrationState, InteractiveState
-    from src.turret.operations import TurretOperation
+    from src.turret.operations import TurretOperator
     from src.turret.targeting import TurretCoordinates, CameraCoordinates, CalibrationParameters, TargetingSystem
     from src.turret.hardware import MotorHatInterface, PowerRelayInterface
     from src.host.tracking import MotionDetector
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 # TODO: add new command and states for the new run modes
 CommandLike = Union["Command", "MoveCommand", "MoveRelativeCommand", "FireCommand", "StopCommand", "AimCommand"]
 StateLike = Union["TurretState", "IdleState", "AimingState", "FiringState", "CalibrationState", "InteractiveState"]
-OperationLike = NewType("OperationLike", "TurretOperation")  # NewType is used to create a distinct type for clarity
+OperatorLike = NewType("OperatorLike", "TurretOperator")  # NewType is used to create a distinct type for clarity
 
 TurretControllerType = NewType("TurretControllerType", "TurretController")
 TargetingSystemType = NewType("TargetingSystemType", "TargetingSystem")
@@ -66,7 +66,7 @@ __all__ = [
     "ImgMaskPair",
     "CommandLike",
     "StateLike",
-    "OperationLike",
+    "OperatorLike",
     "TurretControllerType",
     "TargetingSystemType",
     "TurretCoordinatesType",

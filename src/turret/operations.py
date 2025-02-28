@@ -1,7 +1,6 @@
 import time
 from typing import Tuple
 # local imports
-#from ..config.types import TargetingSystemType
 from ..config import config as cfg
 from .hardware import MotorHatInterface, PowerRelayInterface
 from .targeting import TargetingSystem
@@ -9,25 +8,33 @@ from .targeting import TargetingSystem
 
 
 # TODO: think over whether it would be more apt to call this `TurretOperator` given the way it's treated in interactive mode in the controller
-class TurretOperation:
+class TurretOperator:
     """ Handles low-level GPIO and motor operations """
     # NOTE: if this class is subordinate to a controller, it should probably receive more arguments to its constructor and be less independent
     def __init__(self, relay_pin: int, interactive: bool = False):
         """ Initialize the turret operation with motor channels and GPIO relay pin.
             :param relay_pin: GPIO pin connected to the relay for firing mechanism.
         """
-        # using an encapsulated class for both stepper motors
-        self.motorkit = MotorHatInterface()
-        self.targeting_system = TargetingSystem()
-        # TODO: load actual coordinates from a calibration file with last known (or just the default) coordinates
-            # alternatively, it could be reset to the starting position each time, but an unexpected shutdown would mean it would need recalibrating
-        #self.load_calibration()
-        self.power_relay = PowerRelayInterface(relay_pin)
+        #~ MIGHT REMOVE: not actually used anywhere since the controller is the one that sets the state of the turret
         self.interactive_mode = interactive
         # letting this be set by the controller or other outside influences instead of the config so that the behavior is more predictable
-        self.safe_mode = False
+        self.safe_mode = not self.interactive_mode
+        self.debug_mode = cfg.DEBUG_MODE
         self.max_duration = cfg.MAX_FIRE_DURATION
         self.rotation_range: Tuple[float, float] = cfg.ROTATION_RANGE
+        self._setup_hardware(relay_pin)
+        self.targeting_system = TargetingSystem()
+
+    def _setup_hardware(self, relay_pin: int):
+        """ Initialize the hardware components of the turret or mock hardware for testing """
+        # using an encapsulated class for both stepper motors
+        if not self.debug_mode:
+            self.motorkit = MotorHatInterface()
+            self.power_relay = PowerRelayInterface(relay_pin)
+        else:
+            from .hardware import MockMotorHatInterface, MockPowerRelayInterface
+            self.motorkit = MockMotorHatInterface()
+            self.power_relay = MockPowerRelayInterface(relay_pin)
 
     def set_safe_mode(self, flag: bool):
         self.safe_mode = flag
@@ -94,7 +101,7 @@ class TurretOperation:
         if self.safe_mode:
             print("[OP] SAFE_MODE is ON => skipping fire()")
             return
-        print(f"[OP] Firing turret for {duration} seconds!")
+        print(f"[OP] Firing turret for {duration} seconds...")
         self.power_relay.run_n_seconds(duration)
 
 
@@ -108,7 +115,8 @@ class TurretOperation:
 
     def cleanup(self):
         """ Clean up GPIO on shutdown """
-        import RPi.GPIO as GPIO
         print("[OP] Cleaning up GPIO and resetting turret...")
         self.reset_to_initial()
-        GPIO.cleanup()
+        if not self.debug_mode:
+            import RPi.GPIO as GPIO
+            GPIO.cleanup()

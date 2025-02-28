@@ -69,6 +69,7 @@ class DetectionFeedback:
         if num_targets == 1:
             return self.target_center[0]
         elif num_targets > 1:
+            # average the centers of the targets that are marked as shootable, assuming that it's all the same object
             centers = [c for i, c in enumerate(self.target_center) if self.shoot_flag[i]]
             return tuple([int(round(xi/len(centers))) for xi in map(sum, zip(*centers))])
         else:

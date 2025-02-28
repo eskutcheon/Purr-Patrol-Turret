@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 import sys, time
-import termios
 import contextlib
 from copy import deepcopy
 from threading import Thread
@@ -16,20 +15,49 @@ from .command import (
     ConditionalFireCommand
 )
 
-# TODO: add to utils once I sort out dependencies between modules so that torch isn't needed on the Pi
-@contextlib.contextmanager
-def raw_mode(file):
-    """ Magic function that allows key presses
-        :param file:
-    """
-    old_attrs = termios.tcgetattr(file.fileno())
-    new_attrs = deepcopy(old_attrs)
-    new_attrs[3] &= ~(termios.ECHO | termios.ICANON)
-    try:
-        termios.tcsetattr(file.fileno(), termios.TCSADRAIN, new_attrs)
+# NOTE: necessary since termios is only available on POSIX systems (Linux, macOS) and not on Windows
+    # both termios and msvcrt are part of the Python standard library for the respective platforms
+try:
+    import termios
+    # TODO: add to utils once I sort out dependencies between modules so that torch isn't needed on the Pi
+    @contextlib.contextmanager
+    def raw_mode(file):
+        """ Magic function that allows key presses for Unix systems
+            :param file:
+        """
+        old_attrs = termios.tcgetattr(file.fileno())
+        new_attrs = deepcopy(old_attrs)
+        new_attrs[3] &= ~(termios.ECHO | termios.ICANON)
+        try:
+            termios.tcsetattr(file.fileno(), termios.TCSADRAIN, new_attrs)
+            yield
+        finally:
+            termios.tcsetattr(file.fileno(), termios.TCSADRAIN, old_attrs)
+    # method for reading keys in Unix simply accesses stdin directly
+    def read_key():
+        """ read a single key press from stdin (for Unix systems) """
+        return sys.stdin.read(1)
+except ModuleNotFoundError:
+    import msvcrt
+    @contextlib.contextmanager
+    def raw_mode(file):
+        """ Magic function that allows key presses on Windows
+            :param file:
+        """
         yield
-    finally:
-        termios.tcsetattr(file.fileno(), termios.TCSADRAIN, old_attrs)
+    # also overriding the method for reading keys since msvcrt uses a different method
+    def read_key():
+        """ read a single key press on Windows and restrict to simple ASCII characters """
+        ch = msvcrt.getch()
+        if ch in {b'\x03', b'\x1a'}:  # handle Ctrl+C and Ctrl+Z
+            raise KeyboardInterrupt
+        elif ch in {b'\x00', b'\xe0'}:  # handle special keys (arrows, function keys)
+            ch = msvcrt.getch()
+            return None  # ignore for now, or return a mapping later
+        return ch.decode('utf-8', errors="ignore")  # decode bytes to string for ASCII characters
+except Exception as e:
+    print(f"Error setting up raw mode: {e}")
+    raise e
 
 
 class TurretState(ABC):
@@ -89,14 +117,14 @@ class InteractiveState(TurretState):
 
     def execute_spacebar_action(self, control: TurretControllerType):
         """ Return the command to execute for the current action """
-        cmd = FireCommand(self.control.operation)
+        cmd = FireCommand(control.operation)
         control.queue_command(cmd)
 
     def _print_instructions(self):
-        print("Calibration Mode Controls:")
+        print(f"{self.mode_abbrev[1].capitalize()} Mode Controls:")
         print("  w/s/a/d => move turret up/down/left/right")
         print(f"  space   => ({self.action_desc})")
-        print("  q       => quit calibration mode")
+        print(f"  q       => quit {self.mode_abbrev[1]} mode")
         print("Press Ctrl+C to force exit if needed.\n")
 
     def _loop(self, control: TurretControllerType):
@@ -104,20 +132,21 @@ class InteractiveState(TurretState):
         degrees_per_press = cfg.INTERACTIVE_STEP_MULT * cfg.DEGREES_PER_STEP
         with raw_mode(sys.stdin):
             while not self.stop_flag:
-                ch = sys.stdin.read(1)
+                ch = read_key()
                 if not ch:
-                    break
+                    print(f"[{self.mode_abbrev[0]}] Missing/Unrecognized key; Try again:")
+                    continue
                 if ch == 'q':
                     print(f"[{self.mode_abbrev[0]}] Exiting {self.mode_abbrev[1]} mode.")
                     self.stop_flag = True
                     break
                 elif ch == ' ': # space => fire
-                    self.execute_spacebar_action()
+                    self.execute_spacebar_action(control)
                 elif ch in self.interactive_mapping:
                     cmd = self.interactive_mapping[ch](control.operation, degrees_per_press)
                     control.queue_command(cmd)
                 else:
-                    print(f"[{self.mode_abbrev}] Invalid key: `{ch}`")
+                    print(f"[{self.mode_abbrev[0]}] Invalid key: `{ch}`")
                     self._print_instructions()
                 control.process_commands()
         # when done, go back to IdleState
@@ -125,7 +154,7 @@ class InteractiveState(TurretState):
         control.handle_state()
 
     def handle(self, control: TurretControllerType, *args, **kwargs):
-        print(f"[{self.mode_abbrev[0]}] Entering {self.__name__}...")
+        print(f"[{self.mode_abbrev[0]}] Entering {self.__class__.__name__}...")
         self._print_instructions()
         Thread(target=self._loop, args=[control], daemon=True).start()
         try:
@@ -175,9 +204,9 @@ class MonitoringState(ABC):
 
     def handle(self, control: TurretControllerType, *args, **kwargs):
         """ called by the controller to handle the current state - checks frames and calls handle_frame() for each new frame """
-        if len(args) == 0 or "frame" not in kwargs:
+        if len(args) == 0 and "frame" not in kwargs:
             raise ValueError("MonitoringState.handle() requires a frame argument.")
-        frame = args[0] if len(args) > 0 else kwargs["frame"]
+        frame = args.pop(0) if len(args) > 0 else kwargs.pop("frame")
         self.handle_frame(control, frame, *args, **kwargs)
 
     @abstractmethod
@@ -203,9 +232,10 @@ class MotionTrackingOnlyState(MonitoringState):
             # If motion was detected, aim to target_coord and fire
             print("[STATE] MotionTrackingOnlyState => motion => aiming & firing.")
             aim_cmd = AimCommand(control.operation, control.operation.targeting_system, target_coord)
-            control.queue_then_process_commands(aim_cmd)
+            #control.queue_then_process_commands(aim_cmd)
             fire_cmd = ConditionalFireCommand(control.operation)
-            control.queue_then_process_commands(fire_cmd)
+            #control.queue_then_process_commands(fire_cmd)
+            control.queue_then_process_commands(aim_cmd, fire_cmd)
 
 
 class MotionTrackingDetectionState(MonitoringState):
@@ -219,7 +249,7 @@ class MotionTrackingDetectionState(MonitoringState):
         # 1) Check for motion
         track_cmd = MotionTrackingCommand(self.motion_detector, frame)
         control.queue_then_process_commands(track_cmd)
-        found_motion, _, _ = track_cmd.result
+        found_motion, _ = track_cmd.result
         if found_motion:
             print("[STATE] MotionTrackingDetectionState => motion => running detection.")
             # 2) If motion => run detection
@@ -232,6 +262,7 @@ class MotionTrackingDetectionState(MonitoringState):
                 # NOTE: detection returns center in pixel coords
                 target_coord = results.resolve_target()
                 aim_cmd = AimCommand(control.operation, control.operation.targeting_system, target_coord)
-                control.queue_then_process_commands(aim_cmd)
+                #control.queue_then_process_commands(aim_cmd)
                 fire_cmd = ConditionalFireCommand(control.operation)
-                control.queue_then_process_commands(fire_cmd)
+                #control.queue_then_process_commands(fire_cmd)
+                control.queue_then_process_commands(aim_cmd, fire_cmd)

@@ -1,13 +1,8 @@
 from typing import Literal, Dict
-import board
 import time
 from dataclasses import dataclass, field
-from adafruit_motorkit import MotorKit
 from adafruit_motor import stepper
-
-#import RPi.GPIO as GPIO
 import digitalio
-
 
 
 class PowerRelayInterface:
@@ -17,6 +12,7 @@ class PowerRelayInterface:
         self.relay_pin = relay_pin
         # GPIO.setmode(GPIO.BCM)
         # GPIO.setup(self.relay_pin, GPIO.OUT)
+        import board
         #& ALT: also adding approach that I confirmed working on the Pi:
         self.relay = digitalio.DigitalInOut(getattr(board, f"D{self.relay_pin}"))
         self.toggle_off()
@@ -38,16 +34,17 @@ class PowerRelayInterface:
         self.toggle_off()
 
 
-
 class MotorHatInterface:
     """ Interface to the Adafruit Motor Hat. """
     def __init__(self):
         """ Initialize the motor hat interface. """
+        from adafruit_motorkit import MotorKit
+        import board
         self.motor_kit = MotorKit(i2c = board.I2C())
         self.pan_motor = StepperMotor(self._get_stepper_motor(1), 1)
         self.tilt_motor = StepperMotor(self._get_stepper_motor(2), 2)
 
-    def _get_stepper_motor(self, motor_num: Literal[1, 2]) -> stepper.StepperMotor:
+    def _get_stepper_motor(self, motor_num: Literal[1, 2]) -> 'stepper.StepperMotor':
         """ get stepper motor object from the motor kit """
         if motor_num not in [1, 2]:
             raise ValueError(f"Invalid motor number: {motor_num}")
@@ -79,3 +76,58 @@ class StepperMotor:
         for _ in range(steps):
             self.motor.onestep(direction=step_direction, style=stepper.INTERLEAVE)
             time.sleep(0.01)  # Add a small delay to allow the motor to move smoothly
+
+
+
+################################### Mock classes for debugging purposes ##########################################
+
+@dataclass
+class MockPowerRelay:
+    direction = "LOW"
+
+class MockPowerRelayInterface:
+    """ Mock interface for the power relay module for debugging purposes """
+    def __init__(self, relay_pin: int):
+        """ Initialize the mock relay module interface with a GPIO pin, but don't set up any GPIO """
+        self.relay_pin = relay_pin
+        self.relay = MockPowerRelay()
+        self.toggle_off()
+
+    def toggle_on(self):
+        self.relay.direction = "HIGH"
+
+    def toggle_off(self):
+        self.relay.direction = "LOW"
+
+    def run_n_seconds(self, duration: float = 3):
+        """ Fire the relay module for a specified duration. """
+        self.toggle_on()
+        time.sleep(duration) # duration of fire
+        self.toggle_off()
+
+@dataclass
+class MockStepperMotor:
+    """ Mock stepper motor for debugging purposes """
+    channel: int
+    steps: int = 0
+
+    def step(self, steps: int, direction: Literal[1, -1]):
+        """ step the motor a number of (half) steps in a direction and style """
+        self.steps += (steps//2) * direction
+        print(f"[MOCK] Stepper motor {self.channel} moved {steps//2} steps in direction {direction}. Total steps: {self.steps}")
+
+
+class MockMotorHatInterface:
+    """ Mock interface for the motor hat for debugging purposes """
+    def __init__(self):
+        """ Initialize the mock motor hat interface, but don't set up any GPIO """
+        self.pan_motor = MockStepperMotor(channel=1)
+        self.tilt_motor = MockStepperMotor(channel=2)
+
+    def move_pan(self, num_steps: int, direction: Literal[1, -1]):
+        """ simulate movement of the turret along the x-axis """
+        self.pan_motor.step(num_steps, direction)
+
+    def move_tilt(self, num_steps: int, direction: Literal[1, -1]):
+        """ simulate movement of the turret along the y-axis """
+        self.tilt_motor.step(num_steps, direction)

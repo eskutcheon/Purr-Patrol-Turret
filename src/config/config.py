@@ -1,7 +1,10 @@
 """ Stores centralized configuration values for both the Pi and desktop server """
 
-### User Parameters ###
-SAFE_MODE = False  # if True, turret will not fire
+#!! should be a temporary addition, but I do want to add a debugging mode for running on desktop eventually
+DEBUG_MODE = True # if True, execution will print debug messages to console instead of operating any hardware
+
+### Turret Operational Parameters ###
+SAFE_MODE = False  # if True, turret will not fire (good for debugging or in testing automated modes)
 DEGREES_PER_STEP = 1.8
 INTERACTIVE_STEP_MULT = 2
 MAX_FIRE_DURATION = 3  # in seconds

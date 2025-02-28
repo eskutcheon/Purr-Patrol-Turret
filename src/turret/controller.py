@@ -1,15 +1,15 @@
-from typing import List, Optional
+from typing import List, Optional, Iterable
+import time
 # local imports
 from src.config import config as cfg
-from src.config.types import TurretControllerType, OperationLike, StateLike, CommandLike, MotionDetectorType, DetectionPipelineType
+from src.config.types import TurretControllerType, OperatorLike, StateLike, CommandLike, MotionDetectorType, DetectionPipelineType
 from src.turret.state import IdleState, InteractiveState, CalibrationState, MotionTrackingOnlyState, MotionTrackingDetectionState
 from src.rpi.camera import CameraFeed
-from src.host.tracking import MotionDetector
 
 
 class TurretController:
     """High-level control logic for the turret."""
-    def __init__(self, operation: OperationLike) -> TurretControllerType:
+    def __init__(self, operation: OperatorLike) -> TurretControllerType:
         self.operation = operation
         self.targeting_system = operation.targeting_system
         # TODO: integrate a "friendly" state object here that can't be overridden to avoid misfires
@@ -38,9 +38,10 @@ class TurretController:
             command = self.command_queue.pop(0)
             command.execute()
 
-    def queue_then_process_commands(self, command: CommandLike):
+    def queue_then_process_commands(self, *commands: Iterable[CommandLike]):
         """ queue a command and immediately process the queue """
-        self.queue_command(command)
+        for command in commands:
+            self.queue_command(command)
         self.process_commands()
 
 
@@ -62,6 +63,8 @@ class TurretController:
         calibrator = CameraCalibrator(checkerboard_size=cfg.CHECKERBOARD_SIZE, square_size=cfg.SQUARE_SIZE)
         # We'll show the same “live feed” but in calibration flavor:
         with CameraFeed(cfg.CAMERA_PORT, max_dim_length=1080) as feed:
+            #! FIXME: to recognize keyboard input to capture frames, the window focus seems to need to be on the live feed window
+                # because of the way that I set up `execute_spacebar_action` for interactive and calibration states, it has a reference to this controller
             # define a key handler that triggers calibrator.capture_checkerboard when pressing space
             def feed_key_handler(key):
                 if key == ord(' '):
@@ -81,19 +84,26 @@ class TurretController:
     ):
         """ Start a loop capturing frames and pass them to a MonitoringState that fires on *any* motion. """
         if motion_detector is None:
+            from src.host.tracking import MotionDetector
             motion_detector = MotionDetector(threshold=cfg.MOTION_THRESHOLD)
         # Create the specialized state:
         new_state = MotionTrackingOnlyState(motion_detector)
         self.set_state(new_state)
+        print("created motion tracker and its state - adding a wait to see GPU allocation at this point")
+        time.sleep(5)
         # Open camera feed in the controller
         with CameraFeed(camera_port=cfg.CAMERA_PORT, max_dim_length=720) as feed:
             # Possibly a loop that checks user input to break:
             while True:
                 frame = feed.capture_frame()
+                print("debugging: frame captured")
                 # Pass the frame to the current state’s handle_frame method
                 self.handle_state(frame=frame)
+                print("debugging: frame passed to state - waiting for 5 seconds to see GPU allocation")
+                time.sleep(5)
                 # allow pressing 'q' to exit:
-                feed.keypress_monitor()
+                if feed.keypress_monitor():
+                    break
         # return to idle afterwards
         self.set_state(IdleState())
         self.handle_state()
@@ -111,6 +121,7 @@ class TurretController:
             from src.host.detection import DetectionPipeline
             detection_pipeline = DetectionPipeline.default_factory()
         if motion_detector is None:
+            from src.host.tracking import MotionDetector
             motion_detector = MotionDetector(threshold=cfg.MOTION_THRESHOLD)
         # Create the specialized state:
         new_state = MotionTrackingDetectionState(motion_detector, detection_pipeline)
@@ -121,8 +132,11 @@ class TurretController:
                 frame = feed.capture_frame()
                 # Pass the frame to the current state
                 self.handle_state(frame=frame)
+                #del frame  # free up memory
                 # allow pressing 'q' to exit:
-                feed.keypress_monitor()
+                if feed.keypress_monitor():
+                    break
+                time.sleep(10) # only check every 10 seconds to avoid overloading the GPU
         # Return to idle afterwards
         self.set_state(IdleState())
         self.handle_state()

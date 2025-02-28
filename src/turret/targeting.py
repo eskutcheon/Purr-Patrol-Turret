@@ -12,8 +12,6 @@ from ..config import config as cfg
 
 
 
-
-
 @dataclass
 class TurretCoordinates:
     x: Union[float, int]
@@ -117,7 +115,9 @@ class TargetingSystem:
         """ Using the turret's current position (x, y, theta_x, theta_y) and calibration fields (e.g. focal length),
             compute how many degrees we must move in pan (dx_deg) and tilt (dy_deg) to reach the target.
         """
-        dx, dy = self.current_position.compute_displacement(target_coord)
+        print("type of target_coord: ", type(target_coord))
+        target_pos = (target_coord.x, target_coord.y) if isinstance(target_coord, TurretCoordinates) else target_coord
+        dx, dy = self.current_position.compute_displacement(target_pos)
         # e.g. focal_length might be [fx, fy]
         fx, fy = self.calibration.focal_length
         # since fx, fy from OpenCV calibration are typically pixel units, interpret them consistently for angles
