@@ -24,19 +24,18 @@ FOCAL_LENGTH = (1, 1)
 
 # tracking and detection config settings:
 MOTION_THRESHOLD = 0.5  # in pixels
-MOTION_UPDATE_INTERVAL = 10  # in seconds
+MOTION_UPDATE_INTERVAL = 5  # in seconds
 
 
 # calibration config settings:
 CHECKERBOARD_SIZE = (8,6) # actually the number of inner corners in the checkerboard pattern
 SQUARE_SIZE = 25.0 # in mm
 CALIBRATION_FILE = "src/config/calibration.json"
-
+VISUALIZATION_DIR = "results/"
 ####################################################################################################
 #~ new code for the server logic
 ####################################################################################################
 """
-    Key Variables:
     SERVER_IP: IP address of the desktop server
     SERVER_PORT: Port for the Flask server
     CAMERA_PORT: Port for the Raspberry Pi camera

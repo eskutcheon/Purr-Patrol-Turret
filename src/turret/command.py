@@ -124,14 +124,14 @@ class MotionTrackingCommand(Command):
     def __init__(self, motion_detector: MotionDetectorType, frame: np.ndarray):
         self.motion_detector: MotionDetectorType = motion_detector
         self.frame = frame
-        self.result = (False, (None, None))
+        self.result = None
 
     def execute(self):
-        feedback: MotionFeedbackType = self.motion_detector.process_frame(self.frame)
-        if feedback.motion_detected:
-            cx, cy = feedback.centroid
-            # store "True" plus the pixel coords
-            self.result = (True, (cx, cy))
+        self.result: MotionFeedbackType = self.motion_detector.process_frame(self.frame)
+        # if feedback.motion_detected:
+        #     cx, cy = feedback.centroid
+        #     # store "True" plus the pixel coords
+        #     self.result = (True, (cx, cy))
         # else result is already (False, None, None) - no need to set it again
 
 

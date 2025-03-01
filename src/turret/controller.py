@@ -66,6 +66,7 @@ class TurretController:
         with CameraFeed(cfg.CAMERA_PORT, max_dim_length=1080) as feed:
             #! FIXME: to recognize keyboard input to capture frames, the window focus seems to need to be on the live feed window
                 # because of the way that I set up `execute_spacebar_action` for interactive and calibration states, it has a reference to this controller
+                #~ considering adding a threading.Thread subclass that allows interruptions by setting a shared flag to True
             # define a key handler that triggers calibrator.capture_checkerboard when pressing space
             def feed_key_handler(key):
                 if key == ord(' '):
@@ -81,14 +82,15 @@ class TurretController:
     # these could definitely be abstracted into a common base method, but as top-level methods, these are more readable
     def enter_motion_tracking_only_mode(
         self,
-        motion_detector: Optional[MotionDetectorType] = None
+        motion_detector: Optional[MotionDetectorType] = None,
+        save_detections: bool = False,
     ):
         """ Start a loop capturing frames and pass them to a MonitoringState that fires on *any* motion. """
         if motion_detector is None:
             from src.host.tracking import MotionDetector
             motion_detector = MotionDetector(threshold=cfg.MOTION_THRESHOLD)
         # Create the specialized state:
-        new_state = MotionTrackingOnlyState(motion_detector)
+        new_state = MotionTrackingOnlyState(motion_detector, debug=save_detections)
         self.set_state(new_state)
         # Open camera feed in the controller
         with CameraFeed(camera_port=cfg.CAMERA_PORT, max_dim_length=720) as feed:
@@ -110,6 +112,7 @@ class TurretController:
         # TODO: may want to add a factory method with defaults to create a DetectionPipeline in the controller and let it be an optional argument
         detection_pipeline: Optional[DetectionPipelineType] = None,
         motion_detector: Optional[MotionDetectorType] = None,
+        save_detections: bool = False,
     ):
         """ Start a loop capturing frames and pass them to a MonitoringState that triggers object detection, and fires accordingly """
         # if not isinstance(detection_pipeline, DetectionPipelineType):
@@ -121,7 +124,7 @@ class TurretController:
             from src.host.tracking import MotionDetector
             motion_detector = MotionDetector(threshold=cfg.MOTION_THRESHOLD)
         # Create the specialized state:
-        new_state = MotionTrackingDetectionState(motion_detector, detection_pipeline)
+        new_state = MotionTrackingDetectionState(motion_detector, detection_pipeline, debug=save_detections)
         self.set_state(new_state)
         # Open camera feed in the controller
         with CameraFeed(camera_port=cfg.CAMERA_PORT, max_dim_length=720) as feed:
@@ -129,7 +132,6 @@ class TurretController:
                 frame = feed.capture_frame()
                 # Pass the frame to the current state
                 self.handle_state(frame=frame)
-                #del frame  # free up memory
                 # allow pressing 'q' to exit:
                 if feed.keypress_monitor():
                     break

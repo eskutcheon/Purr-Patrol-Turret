@@ -1,6 +1,7 @@
 import time
 import matplotlib.pyplot as plt
 import torch
+from torchvision.utils import draw_bounding_boxes
 import numpy as np
 from typing import Union, List, Dict, Callable, Tuple
 
@@ -13,8 +14,15 @@ def get_user_confirmation(prompt):
     return answers[response]
 
 
-def view_boxes(img, box_coords, labels, target=None, dest_path=None):
-    from torchvision.utils import draw_bounding_boxes
+def view_boxes(img, *args, target=None, dest_path=None):
+    # check if args contains a tuple of (box_coords, labels) or separate arguments
+    box_coords, labels = None, None
+    if len(args) == 2:
+        box_coords, labels = args
+    elif len(args) == 1 and isinstance(args[0], tuple) and len(args[0]) == 2:
+        box_coords, labels = args[0]
+    else:
+        raise ValueError("Invalid arguments. Expected (box_coords, labels) as a tuple or separate arguments.")
     # TODO: need to update this to take an arbitrary number of box_coords, reference labels from a global dictionary, and pick colors randomly
     img_marked = draw_bounding_boxes(img, box_coords, labels=labels, width=2) #, colors=['red', 'green'])
     img_marked = img_marked.numpy().transpose([1,2,0]) # ndarray objects expect the channel dim to be the last one
@@ -32,6 +40,27 @@ def view_boxes(img, box_coords, labels, target=None, dest_path=None):
         plt.close(fig)
     plt.show()
 
+
+def view_contours(img, contours, target=None, dest_path=None):
+    """ visualize contours on an image
+        :param img: Base image as a numpy array.
+        :param contours: Contours as a numpy array of shape (N, 2).
+        :param target: Target as a tuple (row, column) index.
+        :param dest_path: Optional path to save the image.
+    """
+    fig, ax = plt.subplots()
+    ax.imshow(img, cmap='gray')
+    ax.plot(contours[:, 1], contours[:, 0], linewidth=2)  # contours[:, 1] is x, contours[:, 0] is y
+    ax.axis('off')  # Turns off axes
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)  # Removes whitespace
+    if target is not None:
+        ax.scatter([target[1]], [target[0]], color="red", marker="x", s=100)  # target[1] is x, target[0] is y
+    if dest_path is not None:
+        print(f"Saving marked image to {dest_path}...")
+        plt.savefig(dest_path, bbox_inches="tight", pad_inches=0)
+        time.sleep(1)
+        plt.close(fig)
+    plt.show()
 
 # borrowed all the image utility functions from my other projects
 

@@ -3,7 +3,8 @@ import numpy as np
 import torch
 import torchvision as TV
 # local imports
-from ..utils import view_boxes
+# TODO: add debug flag to enable/disable visualization
+#from ..utils import view_boxes
 from ..config.types import DetectorLike
 from .base_detectors import DetectionResult, DetectionFeedback
 

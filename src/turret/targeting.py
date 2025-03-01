@@ -115,7 +115,7 @@ class TargetingSystem:
         """ Using the turret's current position (x, y, theta_x, theta_y) and calibration fields (e.g. focal length),
             compute how many degrees we must move in pan (dx_deg) and tilt (dy_deg) to reach the target.
         """
-        print("type of target_coord: ", type(target_coord))
+        #print("type of target_coord: ", type(target_coord))
         target_pos = (target_coord.x, target_coord.y) if isinstance(target_coord, TurretCoordinates) else target_coord
         dx, dy = self.current_position.compute_displacement(target_pos)
         # e.g. focal_length might be [fx, fy]

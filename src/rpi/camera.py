@@ -54,6 +54,7 @@ class CameraFeed:
             raise RuntimeError("Failed to capture frame from camera.")
         if self.resize_dims is not None:
             frame = cv2.resize(frame, (self.resize_dims[1], self.resize_dims[0]))
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         return frame
 
     def convert_frame_to_bytes(self, frame: np.ndarray) -> bytes:

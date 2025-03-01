@@ -150,22 +150,12 @@ class MotionDetector:
         largest_contour, largest_region = self._get_largest_contour(motion_mask)
         if largest_contour is None or largest_region is None:
             return self._get_negative_detection()
-        centroid = self._get_contour_centroid(largest_region)  # (x, y) in pixel coords
         # return the final (non-empty) detection result
         return MotionDetectionFeedback(
             motion_detected=True,
             contour=largest_contour,    # shape [N,2], in (row,col) format
-            centroid=centroid           # (x,y)
+            centroid=largest_region.centroid # (row, col) indexing since that's what the targeting system and visualizer expect
         )
-
-    def _get_contour_centroid(self, largest_region: 'measure.RegionProperties') -> Tuple[int, int]:
-        """ given a single contour of shape (N,2), compute centroid (cx, cy)
-            contour[:,0] = row, contour[:,1] = col, if you used (y,x) indexing
-        """
-        # calculate a centroid from the largest region (lazy evaluation of regionprops)
-        centroid = largest_region.centroid  # (row, col) indexing format
-        # regionprops's `centroid` is (row, col), so swap to (x, y) format
-        return (centroid[1], centroid[0])  # (x, y) coordinate format
 
     def reset(self):
         """ reset the background running average (e.g., after significant changes in the environment) """

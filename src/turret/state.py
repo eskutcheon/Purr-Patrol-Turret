@@ -1,10 +1,13 @@
 from abc import ABC, abstractmethod
+import os
 import sys, time
 import contextlib
 from copy import deepcopy
+# TODO: consider adding threading.Thread subclass with a shared flag to allow for exiting all threads with keypresses
 from threading import Thread
+from typing import Union, Tuple
 # local imports
-from ..config.types import TurretControllerType, DetectionPipelineType, DetectionFeedbackType, MotionDetectorType
+from ..config.types import TurretControllerType, DetectionPipelineType, DetectionFeedbackType, MotionDetectorType, MotionFeedbackType
 from .command import (
     FireCommand,
     MoveRelativeCommand,
@@ -198,9 +201,18 @@ class MonitoringState(ABC):
     """ base class for continuous monitoring
         accepts frames, checks for motion, and calls subclass method _on_motion_detected() when motion is detected
     """
-    def __init__(self, motion_detector):
+    def __init__(self, motion_detector: MotionDetectorType, debug: bool = False):
         self.motion_detector = motion_detector
-        self.stop_flag = False
+        self.debug_mode = debug
+        if self.debug_mode:
+            self._setup_debug_mode()
+
+    def _setup_debug_mode(self, prefix="base"):
+        from ..config.config import VISUALIZATION_DIR
+        #makedirs(VISUALIZATION_DIR, exist_ok=True)
+        #self.output_path = path.join(VISUALIZATION_DIR, f"{prefix}_{time.strftime('%Y%m%d-%H%M%S')}.jpg")
+        self.output_dir = os.path.join(VISUALIZATION_DIR, prefix)
+        os.makedirs(self.output_dir, exist_ok=True)
 
     def handle(self, control: TurretControllerType, *args, **kwargs):
         """ called by the controller to handle the current state - checks frames and calls handle_frame() for each new frame """
@@ -214,43 +226,64 @@ class MonitoringState(ABC):
         """ called by the controller for each new camera frame """
         pass
 
+    # # TODO: replace type hint for frames with something from config.types later
+    # @abstractmethod
+    # def visualize_target(self, frame, boundaries, target_coord: Tuple[int, int]):
+    #     """ visualize the target on the frame with boundaries around the region of interest """
+    #     pass
+
 
 class MotionTrackingOnlyState(MonitoringState):
     """ If motion is detected, immediately queue a conditional fire (unless safe mode is on). """
-    def __init__(self, motion_detector: MotionDetectorType):
-        self.motion_detector = motion_detector
+    def __init__(self, motion_detector: MotionDetectorType, debug: bool = False):
+        super().__init__(motion_detector, debug)
         # Make sure we reset for fresh differencing
         self.motion_detector.reset()
+
+    def _setup_debug_mode(self, prefix="motion_detect"):
+        super()._setup_debug_mode(prefix)
+        from ..utils import view_contours
+        self.visualize_target = view_contours
 
     def handle_frame(self, control, frame, *args, **kwargs):
         # 1) Create a MotionTrackingCommand to check if there's motion
         track_cmd = MotionTrackingCommand(self.motion_detector, frame)
         control.queue_then_process_commands(track_cmd)
         # result for MotionTrackingCommand is a tuple of (found_motion: bool, target_coord: Union[CoordinatesLike, tuple])
-        found_motion, target_coord = track_cmd.result
-        if found_motion:
+        results: MotionFeedbackType = track_cmd.result
+        if results is not None and results.motion_detected:
             # If motion was detected, aim to target_coord and fire
             print("[STATE] MotionTrackingOnlyState => motion => aiming & firing")
+            target_coord = results.centroid
             aim_cmd = AimCommand(control.operation, control.operation.targeting_system, target_coord)
             fire_cmd = ConditionalFireCommand(control.operation)
             control.queue_then_process_commands(aim_cmd, fire_cmd)
+            if self.debug_mode:
+                output_path = os.path.join(self.output_dir, f"{time.strftime('%Y%m%d-%H%M%S')}.jpg")
+                # visualize the target on the frame with boundaries around the region of interest
+                self.visualize_target(frame, results.contour, target_coord, dest_path=output_path)
             # clear background and reset motion detector for next frame (otherwise it'll likely fire back to back)
             self.motion_detector.reset()
 
 
 class MotionTrackingDetectionState(MonitoringState):
     """ If motion is detected, run detection. If detection says shoot_flag => aim + fire (unless safe mode is on). """
-    def __init__(self, motion_detector: MotionDetectorType, detection_pipeline: DetectionPipelineType):
-        self.motion_detector = motion_detector
+    def __init__(self, motion_detector: MotionDetectorType, detection_pipeline: DetectionPipelineType, debug: bool = False):
+        super().__init__(motion_detector, debug)
         self.detection_pipeline = detection_pipeline
         self.motion_detector.reset()
+
+    def _setup_debug_mode(self, prefix="object_detect"):
+        super()._setup_debug_mode(prefix)
+        from ..utils import view_boxes
+        self.visualize_target = view_boxes
 
     def handle_frame(self, control, frame, *args, **kwargs):
         # check for motion
         track_cmd = MotionTrackingCommand(self.motion_detector, frame)
         control.queue_then_process_commands(track_cmd)
-        found_motion, _ = track_cmd.result
-        if found_motion:
+        tracking_results = track_cmd.result
+        if tracking_results is not None and tracking_results.motion_detected:
             print("[STATE] MotionTrackingDetectionState => motion => running detection")
             # if motion was detected, run object detection for specific classes
             detect_cmd = DetectionCommand(self.detection_pipeline, frame)
@@ -264,5 +297,8 @@ class MotionTrackingDetectionState(MonitoringState):
                 aim_cmd = AimCommand(control.operation, control.operation.targeting_system, target_coord)
                 fire_cmd = ConditionalFireCommand(control.operation)
                 control.queue_then_process_commands(aim_cmd, fire_cmd)
+                if self.debug_mode:
+                    # visualize the target on the frame with boundaries around the region of interest
+                    self.visualize_target(frame, (results.chosen_boxes, results.chosen_boxes), target_coord, dest_path=self.output_path)
                 # clear background and reset motion detector for next frame (otherwise it'll likely fire back to back)
                 self.motion_detector.reset()
