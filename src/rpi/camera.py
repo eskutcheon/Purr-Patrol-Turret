@@ -7,13 +7,14 @@
 import cv2
 from typing import Optional, Callable
 import time
+import logging
 from threading import Thread
 import numpy as np
 # local imports
 from ..utils import get_scaled_dims
 from ..config.types import CameraFeedType, CameraCalibratorType
 
-
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class CameraFeed:
     def __init__(self, camera_port: int = 0, max_dim_length: int = 720) -> CameraFeedType:
@@ -51,11 +52,30 @@ class CameraFeed:
             raise RuntimeError("Camera is not initialized. Use with `CameraFeed` context manager.")
         ret, frame = self.capture.read()
         if not ret:
+            logging.error("Failed to capture frame from camera.")
+            self._log_capture_properties()
             raise RuntimeError("Failed to capture frame from camera.")
         if self.resize_dims is not None:
             frame = cv2.resize(frame, (self.resize_dims[1], self.resize_dims[0]))
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         return frame
+
+    def _log_capture_properties(self):
+        """ Log the properties of the capture object for debugging """
+        if self.capture is not None:
+            logging.debug(f"CAP_PROP_FRAME_WIDTH: {self.capture.get(cv2.CAP_PROP_FRAME_WIDTH)}")
+            logging.debug(f"CAP_PROP_FRAME_HEIGHT: {self.capture.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
+            logging.debug(f"CAP_PROP_FPS: {self.capture.get(cv2.CAP_PROP_FPS)}")
+            logging.debug(f"CAP_PROP_FOURCC: {self.capture.get(cv2.CAP_PROP_FOURCC)}")
+            logging.debug(f"CAP_PROP_FRAME_COUNT: {self.capture.get(cv2.CAP_PROP_FRAME_COUNT)}")
+            logging.debug(f"CAP_PROP_MODE: {self.capture.get(cv2.CAP_PROP_MODE)}")
+            logging.debug(f"CAP_PROP_BRIGHTNESS: {self.capture.get(cv2.CAP_PROP_BRIGHTNESS)}")
+            logging.debug(f"CAP_PROP_CONTRAST: {self.capture.get(cv2.CAP_PROP_CONTRAST)}")
+            logging.debug(f"CAP_PROP_SATURATION: {self.capture.get(cv2.CAP_PROP_SATURATION)}")
+            logging.debug(f"CAP_PROP_HUE: {self.capture.get(cv2.CAP_PROP_HUE)}")
+            logging.debug(f"CAP_PROP_GAIN: {self.capture.get(cv2.CAP_PROP_GAIN)}")
+            logging.debug(f"CAP_PROP_EXPOSURE: {self.capture.get(cv2.CAP_PROP_EXPOSURE)}")
+            logging.debug(f"CAP_PROP_CONVERT_RGB: {self.capture.get(cv2.CAP_PROP_CONVERT_RGB)}")
 
     def convert_frame_to_bytes(self, frame: np.ndarray) -> bytes:
         """ Convert the frame to a format suitable for desktop transmission """
