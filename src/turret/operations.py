@@ -81,7 +81,7 @@ class TurretOperator:
         # if prospective movement would exceed the rotation range, don't move
         current_theta_y = self.targeting_system.current_position.theta_y
         if self.ensure_within_bounds(degrees, current_theta_y):
-            self.motorkit.move_tilt(halfsteps, direction)
+            self.motorkit.move_tilt(halfsteps, -direction)
             self.targeting_system.update_current_position([0, degrees])
 
     def apply_angular_movement(self, dtheta_x: float, dtheta_y: float):

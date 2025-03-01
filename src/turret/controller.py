@@ -55,7 +55,11 @@ class TurretController:
         else:
             with CameraFeed(cfg.CAMERA_PORT, max_dim_length=1080) as live_feed:
                 live_feed.display_live_feed()
-                self.handle_state(callback=self.operation.cleanup)
+                #self.handle_state(callback=self.operation.cleanup)
+                try:
+                    self.handle_state(callback=self.operation.cleanup)
+                finally:
+                    live_feed.stop_live_feed()
 
     def enter_calibration_mode(self):
         """ launch the turret in calibration mode, working like interactive mode but with a different state object and space bar response """
@@ -77,7 +81,11 @@ class TurretController:
             # start camera feed for capturing images in a background thread
             feed.display_live_feed(window_name="Calibration Feed", fps=30, key_handler=feed_key_handler)
             # CalibrationState's handle() method simultaneously runs in another thread giving turret WASD control, etc.
-            self.handle_state(callback=feed.finalize_calibration(calibrator))
+            #self.handle_state(callback=feed.finalize_calibration(calibrator))
+            try:
+                self.handle_state(callback=feed.finalize_calibration(calibrator))
+            finally:
+                feed.stop_live_feed()
 
     # these could definitely be abstracted into a common base method, but as top-level methods, these are more readable
     def enter_motion_tracking_only_mode(

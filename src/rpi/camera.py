@@ -8,7 +8,7 @@ import cv2
 from typing import Optional, Callable
 import time
 import logging
-from threading import Thread
+from threading import Thread, Event
 import numpy as np
 # local imports
 from ..utils import get_scaled_dims
@@ -32,6 +32,7 @@ class CameraFeed:
         self.capture = cv2.VideoCapture(self.camera_port)
         if not self.capture.isOpened():
             raise RuntimeError(f"Unable to open camera on port {self.camera_port}")
+        time.sleep(2) # adding a small delay to allow the camera to warm up
         # Compute resize dimensions dynamically if not already set
         if self.resize_dims is None:
             self.set_resize_dims()
@@ -75,7 +76,6 @@ class CameraFeed:
             logging.debug(f"CAP_PROP_HUE: {self.capture.get(cv2.CAP_PROP_HUE)}")
             logging.debug(f"CAP_PROP_GAIN: {self.capture.get(cv2.CAP_PROP_GAIN)}")
             logging.debug(f"CAP_PROP_EXPOSURE: {self.capture.get(cv2.CAP_PROP_EXPOSURE)}")
-            logging.debug(f"CAP_PROP_CONVERT_RGB: {self.capture.get(cv2.CAP_PROP_CONVERT_RGB)}")
 
     def convert_frame_to_bytes(self, frame: np.ndarray) -> bytes:
         """ Convert the frame to a format suitable for desktop transmission """
@@ -103,22 +103,37 @@ class CameraFeed:
     def display_live_feed(self, window_name: str = "Live Feed", fps: int = 30, key_handler: Optional[Callable] = None):
         """ Opens a window with live video. """
         print(f"Starting live video. Press 'q' to quit.")
+        self.stop_flag = Event()
         def feed_loop():
-            while True:
-                frame = self.capture_frame()
-                self.last_frame = frame  # store the last frame for external access
-                cv2.imshow(window_name, frame)
-                break_flag = self.keypress_monitor(fps=fps, key_handler=key_handler)
-                # TODO: need to add handling of KeyboardInterrupt being raised in other threads to exit then
-                #~ IDEA: create threading.Thread subclass that allows interruptions by setting a shared flag to True
-                #~ IDEA: use a queue to send messages from the main thread to the camera thread to break the loop
-                    # would allow for more complex logic to be passed in, e.g. "stop the feed if motion is detected"
-                    # and would allow passing keypresses from other threads to the camera thread in the case of calibration
-                if break_flag:
-                    break
-            self._close_feed()
+            try:
+                while not self.stop_flag.is_set():
+                    frame = self.capture_frame()
+                    self.last_frame = frame  # store the last frame for external access
+                    cv2.imshow(window_name, frame)
+                    break_flag = self.keypress_monitor(fps=fps, key_handler=key_handler)
+                    # TODO: need to add handling of KeyboardInterrupt being raised in other threads to exit then
+                    #~ IDEA: create threading.Thread subclass that allows interruptions by setting a shared flag to True
+                    #~ IDEA: use a queue to send messages from the main thread to the camera thread to break the loop
+                        # would allow for more complex logic to be passed in, e.g. "stop the feed if motion is detected"
+                        # and would allow passing keypresses from other threads to the camera thread in the case of calibration
+                    if break_flag:
+                        self.stop_flag.set()
+                        break
+            except KeyboardInterrupt:
+                print("KeyboardInterrupt detected. Stopping live feed.")
+                self.stop_flag.set()
+            finally:
+                self._close_feed()
         # run the camera loop in a daemon thread so it won't block the main thread
-        Thread(target=feed_loop, daemon=True).start()
+        self.live_feed_thread = Thread(target=feed_loop, daemon=True)
+        self.live_feed_thread.start()
+
+    def stop_live_feed(self):
+        """ Stop the live feed thread """
+        self.stop_flag.set()
+        if self.live_feed_thread.is_alive():
+            self.live_feed_thread.join()
+        self._close_feed()
 
     # TODO: add type hint for this eventually
     def finalize_calibration(self, calibrator: CameraCalibratorType) -> Callable:
