@@ -14,20 +14,13 @@ def get_user_confirmation(prompt):
     return answers[response]
 
 
-def view_boxes(img, *args, target=None, dest_path=None):
-    # check if args contains a tuple of (box_coords, labels) or separate arguments
-    box_coords, labels = None, None
-    if len(args) == 2:
-        box_coords, labels = args
-    elif len(args) == 1 and isinstance(args[0], tuple) and len(args[0]) == 2:
-        box_coords, labels = args[0]
-    else:
-        raise ValueError("Invalid arguments. Expected (box_coords, labels) as a tuple or separate arguments.")
-    # TODO: need to update this to take an arbitrary number of box_coords, reference labels from a global dictionary, and pick colors randomly
+def view_boxes(img, box_coords, labels, target=None, dest_path=None):
+    if isinstance(img, np.ndarray):
+        img = torch.from_numpy(img).permute(2, 0, 1) if len(img.shape) == 3 else torch.from_numpy(img)
     img_marked = draw_bounding_boxes(img, box_coords, labels=labels, width=2) #, colors=['red', 'green'])
     img_marked = img_marked.numpy().transpose([1,2,0]) # ndarray objects expect the channel dim to be the last one
     fig, ax = plt.subplots()
-    ax.imshow(img_marked)
+    ax.imshow(img_marked, cmap="gray")
     ax.axis('off')  # Turns off axes
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0)  # Removes whitespace
     #plt.imshow(img_marked)
@@ -49,7 +42,7 @@ def view_contours(img, contours, target=None, dest_path=None):
         :param dest_path: Optional path to save the image.
     """
     fig, ax = plt.subplots()
-    ax.imshow(img, cmap='gray')
+    ax.imshow(img, cmap="gray")
     ax.plot(contours[:, 1], contours[:, 0], linewidth=2)  # contours[:, 1] is x, contours[:, 0] is y
     ax.axis('off')  # Turns off axes
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0)  # Removes whitespace

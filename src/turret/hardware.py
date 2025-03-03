@@ -114,7 +114,7 @@ class MockStepperMotor:
     def step(self, steps: int, direction: Literal[1, -1]):
         """ step the motor a number of (half) steps in a direction and style """
         self.steps += (steps//2) * direction
-        print(f"[MOCK] Stepper motor {self.channel} moved {steps//2} steps in direction {direction}. Total steps: {self.steps}")
+        print(f"[MOCK] Stepper motor {self.channel} moved {steps//2} steps in direction {direction}. Net Total Steps: {self.steps}")
 
 
 class MockMotorHatInterface:

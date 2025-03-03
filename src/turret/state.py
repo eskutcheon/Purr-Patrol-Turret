@@ -5,7 +5,7 @@ import contextlib
 from copy import deepcopy
 # TODO: consider adding threading.Thread subclass with a shared flag to allow for exiting all threads with keypresses
 from threading import Thread
-from typing import Union, Tuple
+from typing import Union, Tuple, Optional, Callable
 # local imports
 from ..config.types import TurretControllerType, DetectionPipelineType, DetectionFeedbackType, MotionDetectorType, MotionFeedbackType
 from .command import (
@@ -63,6 +63,10 @@ except Exception as e:
     raise e
 
 
+##################################################################################################################
+############################################# Turret States ######################################################
+##################################################################################################################
+
 class TurretState(ABC):
     """ Abstract base class for turret states """
     @abstractmethod
@@ -102,26 +106,45 @@ class FiringState(TurretState):
         control.execute_command(FireCommand(control.operation))
         control.set_state(IdleState())
 
+##################################################################################################################################
+################################################ Interactive States ##############################################################
+##################################################################################################################################
 
-class InteractiveState(TurretState):
-    """ Spawns a thread to listen for keyboard input; Creates MoveRelativeCommand or FireCommand based on user presses """
-    def __init__(self, step_degrees=5.0):
-        super().__init__()
+class BaseInteractiveState(ABC):
+    """ Base class for interactive states - handles keyboard input and command execution """
+    def __init__(self, step_degrees=5.0, trigger_action: Optional[Callable] = None):
+        """ Initialize the interactive state with the given step degrees and trigger action """
+        self.step_degrees = step_degrees
+        self.spacebar_action: callable = self.set_spacebar_action(trigger_action)
+        self.stop_flag = False
+        self.mode_abbrev = ("BASE", "base")
+        self.action_desc = "do nothing (base action)"
         self.interactive_mapping = {
             "w": lambda op, dtheta: MoveRelativeCommand(op, dx_deg = 0, dy_deg = +dtheta),
             "s": lambda op, dtheta: MoveRelativeCommand(op, dx_deg = 0, dy_deg = -dtheta),
             "a": lambda op, dtheta: MoveRelativeCommand(op, dx_deg = -dtheta, dy_deg = 0),
             "d": lambda op, dtheta: MoveRelativeCommand(op, dx_deg = +dtheta, dy_deg = 0),
         }
-        self.step_degrees = step_degrees
-        self.stop_flag = False
-        self.action_desc = "fire turret at current location"
-        self.mode_abbrev = ("INTER", "interactive")
+        # TODO: add function argument for the function associated with the spacebar - the "trigger action"
+
+    @abstractmethod
+    def handle(self, control: TurretControllerType, *args, **kwargs):
+        """ handle the state behavior - meant to mirror TurretState.handle() and MonitoringState.handle() """
+        pass
+
+    def set_spacebar_action(self, action: Callable = None):
+        """ set the action to be executed when the space bar is pressed """
+        if action is not None and isinstance(action, Callable):
+            return action
+        # else set default
+        def default_action(ctrl: TurretControllerType):
+            ctrl.queue_command(FireCommand(ctrl.operation))
+        return default_action
+
 
     def execute_spacebar_action(self, control: TurretControllerType):
-        """ Return the command to execute for the current action """
-        cmd = FireCommand(control.operation)
-        control.queue_command(cmd)
+        """ return the command to execute for the current action for space bar input """
+        self.spacebar_action(control)
 
     def _print_instructions(self):
         print(f"{self.mode_abbrev[1].capitalize()} Mode Controls:")
@@ -130,6 +153,7 @@ class InteractiveState(TurretState):
         print(f"  q       => quit {self.mode_abbrev[1]} mode")
         print("Press Ctrl+C to force exit if needed.\n")
 
+    #~ pretty sure this could go in the base class - just need to further abstract mapping new key-action pairs
     def _loop(self, control: TurretControllerType):
         from ..config import config as cfg
         degrees_per_press = cfg.INTERACTIVE_STEP_MULT * cfg.DEGREES_PER_STEP
@@ -156,61 +180,78 @@ class InteractiveState(TurretState):
         control.set_state(IdleState())
         control.handle_state()
 
+
+class InteractiveState(BaseInteractiveState):
+    """ Spawns a thread to listen for keyboard input; Creates MoveRelativeCommand or FireCommand based on user presses """
+    def __init__(self, step_degrees=5.0, trigger_action: Optional[Callable] = None):
+        super().__init__(step_degrees, trigger_action)
+        self.mode_abbrev = ("INTER", "interactive")
+        self.action_desc = "fire turret at current location"
+
     def handle(self, control: TurretControllerType, *args, **kwargs):
         print(f"[{self.mode_abbrev[0]}] Entering {self.__class__.__name__}...")
         self._print_instructions()
-        Thread(target=self._loop, args=[control], daemon=True).start()
+        keypress_thread = Thread(target=self._loop, args=[control], daemon=True)
+        keypress_thread.start()
         try:
             while not self.stop_flag:
+                # main thread just keeps checking termination flag
                 time.sleep(1)
         except KeyboardInterrupt:
+            # keyboard interrupt should work at any time
             print(f"[{self.mode_abbrev[0]}] Forcing exit from {self.mode_abbrev[1]} mode...")
             self.stop_flag = True
         finally:
-            # If there's a callback (cleanup, etc.), call it
+            keypress_thread.join()
+            # if there's a callback (cleanup, etc.), call it
             if "callback" in kwargs and kwargs["callback"]:
                 kwargs["callback"]()
 
 
-class CalibrationState(InteractiveState):
+
+
+class CalibrationState(BaseInteractiveState):
     """ Similar to InteractiveState, but used alongside the CameraFeed to capture frames for calibration """
-    def __init__(self, step_degrees=5.0):
-        super().__init__(step_degrees)
+    def __init__(self, step_degrees=5.0, trigger_action: Optional[Callable] = None):
+        super().__init__(step_degrees, trigger_action)
         self.action_desc = "capture and save image for calibration"
         self.mode_abbrev = ("CALIB", "calibration")
 
-    # TODO: will eventually want to extend this to simultaneously capture the current turret coordinates upon each capture
-    def execute_spacebar_action(self, control: TurretControllerType):
-        # for now, do nothing here since the camera feed loop catches space bar inputs
-        pass
+    # TODO: combine in base class after sorting out setting `execute_spacebar_action` in the constructor
+    def handle(self, control: TurretControllerType, *args, **kwargs):
+        print(f"[{self.mode_abbrev[0]}] Entering {self.__class__.__name__}...")
+        self._print_instructions()
+        keypress_thread = Thread(target=self._loop, args=[control], daemon=True)
+        keypress_thread.start()
+        try:
+            while not self.stop_flag:
+                # main thread just keeps checking termination flag
+                time.sleep(1)
+        except KeyboardInterrupt:
+            # keyboard interrupt should work at any time
+            print(f"[{self.mode_abbrev[0]}] Forcing exit from {self.mode_abbrev[1]} mode...")
+            self.stop_flag = True
+        finally:
+            keypress_thread.join()
+            # if there's a callback (cleanup, etc.), call it
+            if "callback" in kwargs and kwargs["callback"]:
+                kwargs["callback"]()
 
-
-###########################################################################################################################
-# TODO: integrate local and remote detection pipelines into the state machine
-def run_full_detection_local(frame):
-    # local motion + detection
-    pass
-
-def run_full_detection_via_flask(frame):
-    # requests.post(...) => receives JSON => parse
-    pass
-###########################################################################################################################
 
 
 class MonitoringState(ABC):
     """ base class for continuous monitoring
         accepts frames, checks for motion, and calls subclass method _on_motion_detected() when motion is detected
     """
-    def __init__(self, motion_detector: MotionDetectorType, debug: bool = False):
+    def __init__(self, motion_detector: MotionDetectorType, debug: Optional[bool] = False):
         self.motion_detector = motion_detector
         self.debug_mode = debug
+        self.break_flag = False
         if self.debug_mode:
             self._setup_debug_mode()
 
     def _setup_debug_mode(self, prefix="base"):
         from ..config.config import VISUALIZATION_DIR
-        #makedirs(VISUALIZATION_DIR, exist_ok=True)
-        #self.output_path = path.join(VISUALIZATION_DIR, f"{prefix}_{time.strftime('%Y%m%d-%H%M%S')}.jpg")
         self.output_dir = os.path.join(VISUALIZATION_DIR, prefix)
         os.makedirs(self.output_dir, exist_ok=True)
 
@@ -235,7 +276,7 @@ class MonitoringState(ABC):
 
 class MotionTrackingOnlyState(MonitoringState):
     """ If motion is detected, immediately queue a conditional fire (unless safe mode is on). """
-    def __init__(self, motion_detector: MotionDetectorType, debug: bool = False):
+    def __init__(self, motion_detector: MotionDetectorType, debug: Optional[bool] = False):
         super().__init__(motion_detector, debug)
         # Make sure we reset for fresh differencing
         self.motion_detector.reset()
@@ -246,7 +287,8 @@ class MotionTrackingOnlyState(MonitoringState):
         self.visualize_target = view_contours
 
     def handle_frame(self, control, frame, *args, **kwargs):
-        # 1) Create a MotionTrackingCommand to check if there's motion
+        # create a MotionTrackingCommand to check if there's motion
+        # TODO: need to ensure this is an instance of RefinedMotionDetector
         track_cmd = MotionTrackingCommand(self.motion_detector, frame)
         control.queue_then_process_commands(track_cmd)
         # result for MotionTrackingCommand is a tuple of (found_motion: bool, target_coord: Union[CoordinatesLike, tuple])
@@ -264,11 +306,12 @@ class MotionTrackingOnlyState(MonitoringState):
                 self.visualize_target(frame, results.contour, target_coord, dest_path=output_path)
             # clear background and reset motion detector for next frame (otherwise it'll likely fire back to back)
             self.motion_detector.reset()
+            # TODO: add checks for some escape condition - maybe a keypress or a timer (long term)
 
 
 class MotionTrackingDetectionState(MonitoringState):
     """ If motion is detected, run detection. If detection says shoot_flag => aim + fire (unless safe mode is on). """
-    def __init__(self, motion_detector: MotionDetectorType, detection_pipeline: DetectionPipelineType, debug: bool = False):
+    def __init__(self, motion_detector: MotionDetectorType, detection_pipeline: DetectionPipelineType, debug: Optional[bool] = False):
         super().__init__(motion_detector, debug)
         self.detection_pipeline = detection_pipeline
         self.motion_detector.reset()
@@ -298,7 +341,11 @@ class MotionTrackingDetectionState(MonitoringState):
                 fire_cmd = ConditionalFireCommand(control.operation)
                 control.queue_then_process_commands(aim_cmd, fire_cmd)
                 if self.debug_mode:
+                    print("frame shape: ", frame.shape)
+                    print("boxes: ", results.chosen_boxes)
+                    print("labels: ", results.chosen_labels)
+                    output_path = os.path.join(self.output_dir, f"{time.strftime('%Y%m%d-%H%M%S')}.jpg")
                     # visualize the target on the frame with boundaries around the region of interest
-                    self.visualize_target(frame, (results.chosen_boxes, results.chosen_boxes), target_coord, dest_path=self.output_path)
+                    self.visualize_target(frame, results.chosen_boxes, results.chosen_labels, target_coord, dest_path=output_path)
                 # clear background and reset motion detector for next frame (otherwise it'll likely fire back to back)
                 self.motion_detector.reset()

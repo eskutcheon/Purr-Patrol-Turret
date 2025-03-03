@@ -133,7 +133,7 @@ class DetectionPipeline:
             center_x = int((ani_box[0] + ani_box[2]) // 2)
             center_y = int((ani_box[1] + ani_box[3]) // 2)
             # package final data
-            chosen_boxes = torch.stack([ani_box, plant_box])
+            chosen_boxes = torch.stack([ani_box, plant_box]).cpu()
             chosen_labels = ["animal_box", "plant_box"]
             return DetectionFeedback([True], [(center_x, center_y)], [iou_val], chosen_boxes, chosen_labels,
                                     notes=[f"Overlap found with IoU={iou_val} with threshold {self.overlap_threshold}"])

@@ -24,7 +24,8 @@ if TYPE_CHECKING:
     from src.turret.operations import TurretOperator
     from src.turret.targeting import TurretCoordinates, CameraCoordinates, CalibrationParameters, TargetingSystem
     from src.turret.hardware import MotorHatInterface, PowerRelayInterface
-    from src.host.tracking import MotionDetector, MotionDetectionFeedback
+    #from src.host.tracking import MotionDetector, MotionDetectionFeedback
+    from src.host.tracking import BaseMotionDetector, RefinedMotionDetector, MotionDetectionFeedback
     from src.host.base_detectors import DetectionFeedback, BaseDetector, SSDDetector, FasterRCNNDetector, RetinaNetDetector #, YOLODetector
     from src.host.detection import DetectionPipeline
     from src.rpi.camera import CameraFeed
@@ -44,10 +45,11 @@ CameraCoordinatesType = NewType("CameraCoordinatesType", "CameraCoordinates")
 CoordinatesLike = Union["TurretCoordinates", "CameraCoordinates"]  # Union of both coordinate types
 CalibrationParamsType = NewType("CalibrationParamsType", "CalibrationParameters")
 
-MotorInterfaceType = NewType("MotorInterfaceType"," MotorHatInterface")
+MotorInterfaceType = NewType("MotorInterfaceType", "MotorHatInterface")
 PowerRelayType = NewType("PowerRelayType", "PowerRelayInterface")
 
-MotionDetectorType = NewType("MotionDetectorType", "MotionDetector")
+#MotionDetectorType = NewType("MotionDetectorType", "MotionDetector")
+MotionDetectorType = Union["BaseMotionDetector", "RefinedMotionDetector"]
 MotionFeedbackType = NewType("MotionFeedbackType", "MotionDetectionFeedback")  # NewType is used to create a distinct type for clarity
 DetectorLike = Union["BaseDetector", "SSDDetector", "FasterRCNNDetector", "RetinaNetDetector"]  #, YOLODetector]"
 DetectionFeedbackType = NewType("DetectionFeedbackType", "DetectionFeedback")

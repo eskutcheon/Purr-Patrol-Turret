@@ -17,5 +17,5 @@ def test_calibration():
     controller.enter_calibration_mode()
 
 if __name__ == "__main__":
-    #test_interactive(True)
-    test_calibration()
+    test_interactive(True)
+    #test_calibration()

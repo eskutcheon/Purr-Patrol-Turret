@@ -1,6 +1,5 @@
 """ Stores centralized configuration values for both the Pi and desktop server """
 
-#!! should be a temporary addition, but I do want to add a debugging mode for running on desktop eventually
 DEBUG_MODE = True # if True, execution will print debug messages to console instead of operating any hardware
 
 ### Turret Operational Parameters ###
@@ -17,6 +16,8 @@ CAMERA_PORT = 0
 RELAY_PIN = 4
 MOTOR_X_REVERSED = False
 MOTOR_Y_REVERSED = False
+
+LIVE_FEED_DELAY = 0.1  # in seconds
 
 #######################
 #! TEMPORARY - REMOVE LATER after fixing calibration.json usage

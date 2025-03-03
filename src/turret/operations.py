@@ -92,7 +92,7 @@ class TurretOperator:
             self.move_x(dtheta_x)
         if dtheta_y != 0:
             self.move_y(dtheta_y)
-        time.sleep(0.5)  # Simulate movement delay
+        # time.sleep(0.05)  # Simulate movement delay
 
     def fire(self, duration: float = 3):
         # Only physically run the relay if safe mode is off

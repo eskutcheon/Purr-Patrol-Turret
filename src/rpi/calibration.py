@@ -114,3 +114,12 @@ class CameraCalibrator:
         with open(json_path, "w") as f:
             json.dump(data, f, indent=4)
         print(f"[CALIB] Done. Reprojection Error = {error:.4f}")
+
+    def finalize(self, json_path: str, resize_dims: Tuple[int, int]):
+        """ Run calibration and save to JSON """
+        H, W = resize_dims
+        ret, mtx, dist, rvecs, tvecs, error = self.run_calibration((W, H))
+        if ret:
+            self.save_to_json(json_path, ret, mtx, dist, rvecs, tvecs, error)
+        else:
+            print("[CALIB] Calibration not successful or not enough images.")
