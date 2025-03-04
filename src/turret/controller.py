@@ -49,7 +49,7 @@ class TurretController:
     def spawn_live_camera_thread(self, feed: CameraFeed):
         self.stop_event = Event()
         # run the camera loop in a daemon thread so it won't block the main thread
-        self.live_feed_thread = Thread(target=feed.display_live_feed,
+        self.live_feed_thread = Thread(target=feed.display_live_feed_plt, #feed.display_live_feed,
                                        args=[self.stop_event, cfg.LIVE_FEED_DELAY], daemon=True)
         self.live_feed_thread.start()
 

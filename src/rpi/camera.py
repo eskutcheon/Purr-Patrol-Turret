@@ -4,6 +4,7 @@
 """
 
 import cv2
+import matplotlib.pyplot as plt
 from typing import Optional, Callable, Tuple
 import time
 from threading import Thread, Event
@@ -109,6 +110,33 @@ class CameraFeed:
             raise e
         finally:
             self._close_feed()
+
+    def display_live_feed_plt(self, stop_event: Event, render_delay: int = 0.1):
+        print(f"Starting live video feed (matplotlib). Press 'q' to quit.")
+        # Create matplotlib figure
+        fig, ax = plt.subplots()
+        frame = self.capture_frame()
+        img_display = ax.imshow(frame)
+        with plt.ion():  # set interactive mode
+            try:
+                while not stop_event.is_set():
+                    frame = self.capture_frame()
+                    if frame is None:
+                        continue
+                    img_display.set_data(frame)  # Update frame data
+                    plt.draw()
+                    plt.pause(render_delay)  # Allow GUI events to process
+            except KeyboardInterrupt:
+                print("KeyboardInterrupt detected. Stopping live feed.")
+                stop_event.set()
+            except Exception as e:
+                print(f"Error in live feed: {e}")
+                raise e
+            finally:
+                self._close_feed()
+        #plt.ioff()  # Turn off interactive mode
+        plt.close(fig)
+
 
     def convert_frame_to_bytes(self, frame: np.ndarray) -> bytes:
         """ Convert the frame to a format suitable for desktop transmission """
