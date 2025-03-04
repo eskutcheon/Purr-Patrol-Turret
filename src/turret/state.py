@@ -4,7 +4,7 @@ import sys, time
 import contextlib
 from copy import deepcopy
 # TODO: consider adding threading.Thread subclass with a shared flag to allow for exiting all threads with keypresses
-from threading import Thread
+from threading import Thread, Event
 from typing import Union, Tuple, Optional, Callable
 # local imports
 from ..config.types import TurretControllerType, DetectionPipelineType, DetectionFeedbackType, MotionDetectorType, MotionFeedbackType
@@ -112,11 +112,10 @@ class FiringState(TurretState):
 
 class BaseInteractiveState(ABC):
     """ Base class for interactive states - handles keyboard input and command execution """
-    def __init__(self, step_degrees=5.0, trigger_action: Optional[Callable] = None):
+    def __init__(self, trigger_action: Optional[Callable] = None, stop_event: Optional[Event] = None):
         """ Initialize the interactive state with the given step degrees and trigger action """
-        self.step_degrees = step_degrees
+        self.stop_event = stop_event or Event()  # use given stop_event or create a new one
         self.spacebar_action: callable = self.set_spacebar_action(trigger_action)
-        self.stop_flag = False
         self.mode_abbrev = ("BASE", "base")
         self.action_desc = "do nothing (base action)"
         self.interactive_mapping = {
@@ -125,12 +124,18 @@ class BaseInteractiveState(ABC):
             "a": lambda op, dtheta: MoveRelativeCommand(op, dx_deg = -dtheta, dy_deg = 0),
             "d": lambda op, dtheta: MoveRelativeCommand(op, dx_deg = +dtheta, dy_deg = 0),
         }
-        # TODO: add function argument for the function associated with the spacebar - the "trigger action"
 
     @abstractmethod
     def handle(self, control: TurretControllerType, *args, **kwargs):
         """ handle the state behavior - meant to mirror TurretState.handle() and MonitoringState.handle() """
         pass
+
+    def cleanup(self, additional_callback: Optional[Callable] = None):
+        """ cleanup method - called when exiting the state """
+        print(f"[{self.mode_abbrev[0]}] Exiting from {self.mode_abbrev[1]} mode...")
+        self.stop_event.set()
+        if additional_callback:
+            additional_callback()
 
     def set_spacebar_action(self, action: Callable = None):
         """ set the action to be executed when the space bar is pressed """
@@ -140,7 +145,6 @@ class BaseInteractiveState(ABC):
         def default_action(ctrl: TurretControllerType):
             ctrl.queue_command(FireCommand(ctrl.operation))
         return default_action
-
 
     def execute_spacebar_action(self, control: TurretControllerType):
         """ return the command to execute for the current action for space bar input """
@@ -158,14 +162,14 @@ class BaseInteractiveState(ABC):
         from ..config import config as cfg
         degrees_per_press = cfg.INTERACTIVE_STEP_MULT * cfg.DEGREES_PER_STEP
         with raw_mode(sys.stdin):
-            while not self.stop_flag:
+            while not self.stop_event.is_set():
                 ch = read_key()
                 if not ch:
                     print(f"[{self.mode_abbrev[0]}] Missing/Unrecognized key; Try again:")
                     continue
                 if ch == 'q':
                     print(f"[{self.mode_abbrev[0]}] Exiting {self.mode_abbrev[1]} mode.")
-                    self.stop_flag = True
+                    self.stop_event.set()
                     break
                 elif ch == ' ': # space => fire
                     self.execute_spacebar_action(control)
@@ -183,8 +187,12 @@ class BaseInteractiveState(ABC):
 
 class InteractiveState(BaseInteractiveState):
     """ Spawns a thread to listen for keyboard input; Creates MoveRelativeCommand or FireCommand based on user presses """
-    def __init__(self, step_degrees=5.0, trigger_action: Optional[Callable] = None):
-        super().__init__(step_degrees, trigger_action)
+    def __init__(self,
+                 trigger_action: Optional[Callable] = None,
+                 display_func: Optional[Callable] = None,
+                 stop_event: Optional[Event] = None):
+        super().__init__(trigger_action, stop_event)
+        self.display_func = display_func # optional live feed function
         self.mode_abbrev = ("INTER", "interactive")
         self.action_desc = "fire turret at current location"
 
@@ -193,49 +201,49 @@ class InteractiveState(BaseInteractiveState):
         self._print_instructions()
         keypress_thread = Thread(target=self._loop, args=[control], daemon=True)
         keypress_thread.start()
-        try:
-            while not self.stop_flag:
-                # main thread just keeps checking termination flag
-                time.sleep(1)
-        except KeyboardInterrupt:
-            # keyboard interrupt should work at any time
-            print(f"[{self.mode_abbrev[0]}] Forcing exit from {self.mode_abbrev[1]} mode...")
-            self.stop_flag = True
-        finally:
+        def on_exit():
             keypress_thread.join()
             # if there's a callback (cleanup, etc.), call it
             if "callback" in kwargs and kwargs["callback"]:
                 kwargs["callback"]()
-
-
+        try:
+            # Run the display function in the main thread (if provided)
+            if self.display_func:
+                self.display_func()
+            else:
+                while not self.stop_event.is_set():
+                    time.sleep(1)
+        finally:
+            self.cleanup(on_exit)
 
 
 class CalibrationState(BaseInteractiveState):
     """ Similar to InteractiveState, but used alongside the CameraFeed to capture frames for calibration """
-    def __init__(self, step_degrees=5.0, trigger_action: Optional[Callable] = None):
-        super().__init__(step_degrees, trigger_action)
+    def __init__(self,
+                 trigger_action: Optional[Callable] = None,
+                 display_func: Callable = None,
+                 stop_event: Optional[Event] = None):
+        if not display_func:
+            raise ValueError("CalibrationState requires a display_func to be provided.")
+        super().__init__(trigger_action, stop_event)
+        self.display_func = display_func
         self.action_desc = "capture and save image for calibration"
         self.mode_abbrev = ("CALIB", "calibration")
 
-    # TODO: combine in base class after sorting out setting `execute_spacebar_action` in the constructor
     def handle(self, control: TurretControllerType, *args, **kwargs):
         print(f"[{self.mode_abbrev[0]}] Entering {self.__class__.__name__}...")
         self._print_instructions()
         keypress_thread = Thread(target=self._loop, args=[control], daemon=True)
         keypress_thread.start()
-        try:
-            while not self.stop_flag:
-                # main thread just keeps checking termination flag
-                time.sleep(1)
-        except KeyboardInterrupt:
-            # keyboard interrupt should work at any time
-            print(f"[{self.mode_abbrev[0]}] Forcing exit from {self.mode_abbrev[1]} mode...")
-            self.stop_flag = True
-        finally:
+        def on_exit():
             keypress_thread.join()
             # if there's a callback (cleanup, etc.), call it
             if "callback" in kwargs and kwargs["callback"]:
                 kwargs["callback"]()
+        try:
+            self.display_func()
+        finally:
+            self.cleanup(on_exit)
 
 
 

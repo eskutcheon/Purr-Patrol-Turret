@@ -1,6 +1,6 @@
 from typing import List, Optional, Iterable
 import time
-from threading import Thread, Event
+from threading import Event
 # local imports
 from src.config import config as cfg
 from src.config.types import TurretControllerType, OperatorLike, StateLike, CommandLike, MotionDetectorType, DetectionPipelineType
@@ -46,43 +46,31 @@ class TurretController:
             self.queue_command(command)
         self.process_commands()
 
-    def spawn_live_camera_thread(self, feed: CameraFeed):
-        self.stop_event = Event()
-        # run the camera loop in a daemon thread so it won't block the main thread
-        self.live_feed_thread = Thread(target=feed.display_live_feed_plt, #feed.display_live_feed,
-                                       args=[self.stop_event, cfg.LIVE_FEED_DELAY], daemon=True)
-        self.live_feed_thread.start()
-
-    def join_live_camera_thread(self):
-        """ terminate the live camera thread """
-        self.stop_event.set()
-        if self.live_feed_thread.is_alive():
-            self.live_feed_thread.join()
-        # then the `finally` block in `display_live_feed` will close the feed (actually unnecessary though since it's a context manager)
 
     def enter_interactive_mode(self, show_video: bool = False):
         """ launch the turret in interactive mode, with an optional live video feed and WASD controls """
-        # NOTE: setting state without `trigger_action` will use the default trigger action of firing
-        self.set_state(InteractiveState(cfg.DEGREES_PER_STEP)) # stick with default trigger action of firing
         if not show_video:
+            # NOTE: setting state without `trigger_action` will use the default trigger action of firing
+            self.set_state(InteractiveState(cfg.DEGREES_PER_STEP)) # stick with default trigger action of firing
             # Immediately handle the new state
             self.handle_state(callback=self.operation.cleanup)
         else:
+            self.stop_event = Event()
             with CameraFeed(cfg.CAMERA_PORT, max_dim_length=1080) as live_feed:
-                self.spawn_live_camera_thread(live_feed)
-                try:
-                    # pass termination condition (self.stop_event) to the state?
-                    self.handle_state(callback=self.operation.cleanup)
-                finally:
-                    self.join_live_camera_thread()
+                def run_live_feed():
+                    live_feed.display_live_feed(self.stop_event, cfg.LIVE_FEED_DELAY)
+                # NOTE: setting state without `trigger_action` will use the default trigger action of firing
+                self.set_state(InteractiveState(display_func=run_live_feed, stop_event=self.stop_event))
+                self.handle_state(callback=self.operation.cleanup)
 
     def enter_calibration_mode(self):
         """ launch the turret in calibration mode, working like interactive mode but with a different state object and space bar response """
         from src.rpi.calibration import CameraCalibrator
         calibrator = CameraCalibrator(checkerboard_size=cfg.CHECKERBOARD_SIZE, square_size=cfg.SQUARE_SIZE)
-        # We'll show the same “live feed” but in calibration flavor:
+        self.stop_event = Event()
+        # show the same live feed but with calibration objectives (spacebar takes a picture):
         with CameraFeed(cfg.CAMERA_PORT, max_dim_length=1080) as feed:
-            self.spawn_live_camera_thread(feed)
+            #self.spawn_live_camera_thread(feed)
             def calibration_action(*args, **kwargs):
                 # grab the last frame from the feed
                 frame = feed.capture_frame()
@@ -93,14 +81,14 @@ class TurretController:
                 # user presumably pressed 'q' in the feed to exit the loop or 'q' from the turret keyboard thread
                 calibrator.finalize(cfg.CALIBRATION_FILE, feed.resize_dims)
                 self.operation.cleanup()
-            # start camera feed for capturing images in a background thread
-            self.set_state(CalibrationState(calibrator, trigger_action=calibration_action))
-            # CalibrationState's handle() method simultaneously runs in another thread giving turret WASD control, etc.
+            def run_live_feed():
+                feed.display_live_feed(self.stop_event, cfg.LIVE_FEED_DELAY)
+            self.set_state(CalibrationState(trigger_action=calibration_action, display_func=run_live_feed, stop_event=self.stop_event))
+            # CalibrationState's handle() method runs in another thread giving turret WASD control, etc.
             try:
                 self.handle_state(callback=finalize_calibration)
-            finally:
-                self.join_live_camera_thread()
-
+            except Exception as e:
+                raise e
 
 
     # these could definitely be abstracted into a common base method, but as top-level methods, these are more readable
@@ -131,7 +119,10 @@ class TurretController:
                 time.sleep(self.update_interval) # only check every n seconds to reduce computational load
         # return to idle afterwards
         self.set_state(IdleState())
-        self.handle_state()
+        try:
+            self.handle_state()
+        except Exception as e:
+            raise e
 
     def enter_motion_tracking_detection_mode(
         self,
