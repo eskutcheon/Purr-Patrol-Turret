@@ -14,7 +14,7 @@ from ..utils import get_scaled_dims
 
 
 
-class CameraFeed:
+class CameraFeedOpenCV:
     def __init__(self,
                  camera_port: int = 0,
                  max_dim_length: int = 720,
@@ -76,7 +76,7 @@ class CameraFeed:
     def _capture_frame(self) -> np.ndarray:
         """ Capture a single frame from the camera """
         if self.capture is None:
-            raise RuntimeError("Camera is not initialized. Use with `CameraFeed` context manager.")
+            raise RuntimeError("Camera is not initialized. Use with `CameraFeedOpenCV` context manager.")
         ret, self.last_frame = self.capture.read()
         while self.at_max_capture_error(ret):
             ret, self.last_frame = self.capture.read()
@@ -88,11 +88,17 @@ class CameraFeed:
         """ Capture a single frame from the camera and return it as a numpy array """
         frame = self._capture_frame()
         return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-###############################################################################################
-# change use of key_handler and even checking for keypresses to be in the controller
-# keep logic of monitoring for a stop flag in the camera feed
+    ###############################################################################################
+    # change use of key_handler and even checking for keypresses to be in the controller
+    # keep logic of monitoring for a stop flag in the camera feed
 
-    def display_live_feed(self, stop_event: Event, render_delay: int = 0.1):
+    def display_live_feed(self, stop_event: Event, render_delay: int = 0.1, use_plt=True):
+        if use_plt:
+            self._display_live_feed_plt(stop_event, render_delay)
+        else:
+            self._display_live_feed_opencv()
+
+    def _display_live_feed_opencv(self, stop_event: Event, render_delay: int = 0.1):
         """ Opens a window with live video. """
         print(f"Starting live video. Press 'q' to quit.")
         # TODO: update this to be passed from the Controller as an argument and monitor it each iteration
@@ -111,7 +117,7 @@ class CameraFeed:
         finally:
             self._close_feed()
 
-    def display_live_feed_plt(self, stop_event: Event, render_delay: int = 0.1):
+    def _display_live_feed_plt(self, stop_event: Event, render_delay: int = 0.1):
         print(f"Starting live video feed (matplotlib). Press 'q' to quit.")
         # Create matplotlib figure
         fig, ax = plt.subplots()

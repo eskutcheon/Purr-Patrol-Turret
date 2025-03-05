@@ -6,6 +6,25 @@ import numpy as np
 from typing import Union, List, Dict, Callable, Tuple
 
 
+def is_raspberry_pi() -> bool:
+    """ Check if the current system is a Raspberry Pi """
+    try:
+        with open("/sys/firmware/devicetree/base/model", "r") as f:
+            model = f.read().lower()
+            return "raspberry pi" in model
+    except Exception:
+        return False
+
+def has_opencv() -> bool:
+    """ Check if OpenCV is installed and working """
+    try:
+        import cv2
+        return cv2.getBuildInformation() is not None
+    # should be ImportError or ModuleNotFoundError, but more generally catch all exceptions
+    except Exception:
+        return False
+
+
 def get_user_confirmation(prompt):
     answers = {'y': True, 'n': False}
     # ! WARNING: only works in Python 3.8+

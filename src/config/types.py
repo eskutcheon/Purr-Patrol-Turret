@@ -28,7 +28,8 @@ if TYPE_CHECKING:
     from src.host.tracking import BaseMotionDetector, RefinedMotionDetector, MotionDetectionFeedback
     from src.host.base_detectors import DetectionFeedback, BaseDetector, SSDDetector, FasterRCNNDetector, RetinaNetDetector #, YOLODetector
     from src.host.detection import DetectionPipeline
-    from src.rpi.camera import CameraFeed
+    from rpi.camera_opencv import CameraFeedOpenCV
+    from rpi.camera_rpi import CameraFeedRpi
     from src.rpi.calibration import CameraCalibrator
 
 # Turret specific types
@@ -56,7 +57,7 @@ DetectionFeedbackType = NewType("DetectionFeedbackType", "DetectionFeedback")
 DetectionPipelineType = NewType("DetectionPipelineType", "DetectionPipeline")
 
 CameraCalibratorType = NewType("CameraCalibratorType", "CameraCalibrator")
-CameraFeedType = NewType("CameraFeedType", "CameraFeed")
+CameraFeedLike = Union["CameraFeedOpenCV", "CameraFeedRpi"]
 
 
 __all__ = [
@@ -83,5 +84,5 @@ __all__ = [
     "DetectionFeedbackType",
     "DetectionPipelineType",
     "CameraCalibratorType",
-    "CameraFeedType",
+    "CameraFeedLike",
 ]

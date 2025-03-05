@@ -1,11 +1,20 @@
-from typing import List, Optional, Iterable
+from typing import List, Optional, Iterable, ContextManager
 import time
 from threading import Event
 # local imports
 from src.config import config as cfg
-from src.config.types import TurretControllerType, OperatorLike, StateLike, CommandLike, MotionDetectorType, DetectionPipelineType
+from src.config.types import TurretControllerType, OperatorLike, StateLike, CommandLike, MotionDetectorType, DetectionPipelineType, CameraFeedLike
 from src.turret.state import IdleState, InteractiveState, CalibrationState, MotionTrackingOnlyState, MotionTrackingDetectionState
-from src.rpi.camera import CameraFeed
+# for importing the correct camera feed module
+from src.utils import is_raspberry_pi, has_opencv
+
+CameraFeed: CameraFeedLike = None
+if is_raspberry_pi():
+    from rpi.camera_rpi import CameraFeedRpi as CameraFeed
+elif has_opencv():
+    from rpi.camera_opencv import CameraFeedOpenCV as CameraFeed
+else:
+    raise ImportError("No camera module found! Please install OpenCV or libcamera (on Raspberry Pi Cam) to use the turret.")
 
 
 class TurretController:
@@ -58,7 +67,7 @@ class TurretController:
             self.stop_event = Event()
             with CameraFeed(cfg.CAMERA_PORT, max_dim_length=1080) as live_feed:
                 def run_live_feed():
-                    live_feed.display_live_feed(self.stop_event, cfg.LIVE_FEED_DELAY)
+                    live_feed.display_live_feed(self.stop_event, cfg.LIVE_FEED_DELAY, use_plt=True)
                 # NOTE: setting state without `trigger_action` will use the default trigger action of firing
                 self.set_state(InteractiveState(display_func=run_live_feed, stop_event=self.stop_event))
                 self.handle_state(callback=self.operation.cleanup)
@@ -82,7 +91,7 @@ class TurretController:
                 calibrator.finalize(cfg.CALIBRATION_FILE, feed.resize_dims)
                 self.operation.cleanup()
             def run_live_feed():
-                feed.display_live_feed(self.stop_event, cfg.LIVE_FEED_DELAY)
+                feed.display_live_feed(self.stop_event, cfg.LIVE_FEED_DELAY, use_plt=True)
             self.set_state(CalibrationState(trigger_action=calibration_action, display_func=run_live_feed, stop_event=self.stop_event))
             # CalibrationState's handle() method runs in another thread giving turret WASD control, etc.
             try:
@@ -97,7 +106,7 @@ class TurretController:
         motion_detector: Optional[MotionDetectorType] = None,
         save_detections: bool = False,
     ):
-        """ Start a loop capturing frames and pass them to a MonitoringState that fires on *any* motion. """
+        """ start a loop capturing frames and pass them to a MonitoringState that fires on *any* motion """
         if motion_detector is None:
             from src.host.tracking import RefinedMotionDetector
             # TODO: add debugging flag to initialization here

@@ -1,12 +1,12 @@
 import os, sys
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')))
 
-from src.rpi.camera import CameraFeed
+from rpi.camera_opencv import CameraFeedOpenCV
 from src.host.tracking import RefinedMotionDetector
 
 def test_basic_motion_tracking():
     try:
-        with CameraFeed(camera_port=0) as cam:
+        with CameraFeedOpenCV(camera_port=0) as cam:
             motion_det = RefinedMotionDetector()
             # capture some frames -> feed them into the motion detector
             frame1 = cam.capture_frame()

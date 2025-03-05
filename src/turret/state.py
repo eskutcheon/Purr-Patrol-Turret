@@ -218,7 +218,7 @@ class InteractiveState(BaseInteractiveState):
 
 
 class CalibrationState(BaseInteractiveState):
-    """ Similar to InteractiveState, but used alongside the CameraFeed to capture frames for calibration """
+    """ Similar to InteractiveState, but used alongside the CameraFeedOpenCV to capture frames for calibration """
     def __init__(self,
                  trigger_action: Optional[Callable] = None,
                  display_func: Callable = None,

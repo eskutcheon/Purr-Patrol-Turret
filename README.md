@@ -9,10 +9,10 @@ Though the project has been extended to the point that nothing remains, it was o
 
 ## Features
 The turret system has 4 primary modes of operation:
-- **instance segmentation** - the primary mode advertised for this project, this searches for the overlap of pets and plants using an instance segmentation model and performs targeting and fires (with a delay) on the center of their bounding box intersection
-- **motion detection** - fires indiscriminately on motion detection found by calculating the difference in contours in a still frame over time; this is used as the alarm to trigger the instance segmentation model
-- **interactive** - controlled by keyboard input, allowing a user to manually move the turret and fire when the "safety" settings are off
-- **calibration** - essentially the same as the interactive mode without firing capability; the user must center the turret upon its first use in a new location to set the default position; positioning data is saved to JSON
+- **object detection** - the primary mode pursued under the original concept for this project, this searches for the overlap of pets and plants (or any other combination of classes) using an object detection model and performs targeting and fires (with a delay) on the center of their bounding box intersection
+- **motion detection** - fires indiscriminately on motion detection found by calculating the difference in contours in a still frame over time; a more lightweight pipeline is used as the alarm to trigger the instance segmentation model
+- **interactive** - controlled by keyboard input, allowing a user to manually move the turret and fire when the "safety" settings are off; allows an optional simultaneous live video feed
+- **calibration** - allows users to interactively direct the turret to a position and take a screenshot of the current live video feed to capture checkboard patterns for calibration, then calibration results are saved to JSON
 
 
 NOTE: Plans are in place to allow for some flexibility in specifying the object classes to be targeted and for setting other parameters via CLI/YAML input
@@ -47,6 +47,7 @@ cd Purr-Patrol-Turret
 
 ### Additional Instructions
 1. Install requirements for the Raspberry Pi and primary desktop PC respectively via
+TODO: add separate requirements files later or add a setup.py since the installation of Pytorch may differ and I still need to give instructions to build OpenCV from source
 ```
     pip install -r requirements_rpi.txt
     pip install -r requirements_pc.txt
