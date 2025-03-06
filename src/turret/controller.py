@@ -10,9 +10,9 @@ from src.utils import is_raspberry_pi, has_opencv
 
 CameraFeed: CameraFeedLike = None
 if is_raspberry_pi():
-    from rpi.camera_rpi import CameraFeedRpi as CameraFeed
+    from src.rpi.camera_rpi import CameraFeedRpi as CameraFeed
 elif has_opencv():
-    from rpi.camera_opencv import CameraFeedOpenCV as CameraFeed
+    from src.rpi.camera_opencv import CameraFeedOpenCV as CameraFeed
 else:
     raise ImportError("No camera module found! Please install OpenCV or libcamera (on Raspberry Pi Cam) to use the turret.")
 
@@ -60,12 +60,12 @@ class TurretController:
         """ launch the turret in interactive mode, with an optional live video feed and WASD controls """
         if not show_video:
             # NOTE: setting state without `trigger_action` will use the default trigger action of firing
-            self.set_state(InteractiveState(cfg.DEGREES_PER_STEP)) # stick with default trigger action of firing
+            self.set_state(InteractiveState()) # stick with default trigger action of firing
             # Immediately handle the new state
             self.handle_state(callback=self.operation.cleanup)
         else:
             self.stop_event = Event()
-            with CameraFeed(cfg.CAMERA_PORT, max_dim_length=1080) as live_feed:
+            with CameraFeed(cfg.CAMERA_PORT, max_dim_length=720) as live_feed:
                 def run_live_feed():
                     live_feed.display_live_feed(self.stop_event, cfg.LIVE_FEED_DELAY, use_plt=True)
                 # NOTE: setting state without `trigger_action` will use the default trigger action of firing
@@ -78,7 +78,7 @@ class TurretController:
         calibrator = CameraCalibrator(checkerboard_size=cfg.CHECKERBOARD_SIZE, square_size=cfg.SQUARE_SIZE)
         self.stop_event = Event()
         # show the same live feed but with calibration objectives (spacebar takes a picture):
-        with CameraFeed(cfg.CAMERA_PORT, max_dim_length=1080) as feed:
+        with CameraFeed(cfg.CAMERA_PORT, max_dim_length=720) as feed:
             #self.spawn_live_camera_thread(feed)
             def calibration_action(*args, **kwargs):
                 # grab the last frame from the feed

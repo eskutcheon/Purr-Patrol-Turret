@@ -4,6 +4,8 @@
 """
 
 import cv2
+import matplotlib
+matplotlib.use('TkAgg')  # use the 'TkAgg' backend for matplotlib
 import matplotlib.pyplot as plt
 from typing import Optional, Callable, Tuple
 import time
@@ -96,12 +98,11 @@ class CameraFeedOpenCV:
         if use_plt:
             self._display_live_feed_plt(stop_event, render_delay)
         else:
-            self._display_live_feed_opencv()
+            self._display_live_feed_opencv(stop_event, render_delay)
 
     def _display_live_feed_opencv(self, stop_event: Event, render_delay: int = 0.1):
         """ Opens a window with live video. """
         print(f"Starting live video. Press 'q' to quit.")
-        # TODO: update this to be passed from the Controller as an argument and monitor it each iteration
         try:
             while not stop_event.is_set():
                 frame = self._capture_frame()

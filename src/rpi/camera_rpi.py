@@ -9,6 +9,8 @@ except Exception as e:
     print("If running on Windows, be sure to use `camera_opencv.py` instead.")
     raise e
 import numpy as np
+import matplotlib
+matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from typing import Optional, Callable, Tuple
 import time
@@ -17,6 +19,7 @@ from threading import Thread, Event
 
 class CameraFeedRpi:
     def __init__(self,
+                 camera_port: int = 0,
                  max_dim_length: int = 720,
                  resize_dims: Optional[Tuple[int, int]] = None,
                  window_name: str = "Live Feed"):
@@ -48,22 +51,23 @@ class CameraFeedRpi:
     def _close_feed(self):
         """ Release the camera when done. """
         if self.picam2:
-            self.picam2.stop()
+            self.picam2.close()
             self.picam2 = None
 
     def capture_frame(self) -> np.ndarray:
         """ Capture a frame using `libcamera` (picamera2). """
         try:
-            frame = self.picam2.capture_array()
+            frame = self.picam2.capture_array("raw")
             return frame
         except Exception as e:
             print(f"[CAMERA] Capture error: {e}")
             return None
 
-    def display_live_feed(self, stop_event: Event, render_delay: float = 0.1):
+    def display_live_feed(self, stop_event: Event, render_delay: float = 0.1, use_plt=True):
         """ Opens a window with live video using `libcamera`. """
         print(f"Starting live video. Press 'q' to quit.")
         try:
+            #self.picam2.start_preview()
             while not stop_event.is_set():
                 frame = self.capture_frame()
                 if frame is None:
@@ -71,9 +75,10 @@ class CameraFeedRpi:
                     continue
                 plt.imshow(frame)
                 plt.title(self.window_name)
-                plt.pause(render_delay)
-                if plt.waitforbuttonpress(0.01):  # Allows quitting by pressing any key
-                    stop_event.set()
+                plt.pause(0.001)
+                time.sleep(render_delay)
+                # if plt.waitforbuttonpress(0.01):  # Allows quitting by pressing any key
+                #     stop_event.set()
         except KeyboardInterrupt:
             print("KeyboardInterrupt detected. Stopping live feed.")
             stop_event.set()
@@ -81,6 +86,7 @@ class CameraFeedRpi:
             print(f"Error in live feed: {e}")
             raise e
         finally:
+            #self.picam2.stop_preview()
             self._close_feed()
             plt.close()
 
