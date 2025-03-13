@@ -46,7 +46,7 @@ class CameraFeedRpi:
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         """ Close the camera feed when context exits. """
-        self._close_feed()
+        self.cleanup()
 
     def _close_feed(self):
         """ Release the camera when done. """
@@ -54,9 +54,19 @@ class CameraFeedRpi:
             self.picam2.close()
             self.picam2 = None
 
+    def cleanup(self, stop_event: Event = None):
+        """ Cleanup the camera feed, destroy all windows, set stop event, etc. """
+        if stop_event:
+            stop_event.set()
+        #self.picam2.stop_preview()
+        plt.close()
+        self._close_feed()
+
     def capture_frame(self) -> np.ndarray:
         """ Capture a frame using `libcamera` (picamera2). """
         try:
+            #* REFERENCE: for other types of captures: https://github.com/raspberrypi/picamera2/tree/main/examples
+            # may want to eventually implement a function using capture_stream or capture_to_buffer
             frame = self.picam2.capture_array("raw")
             return frame
         except Exception as e:
@@ -65,7 +75,7 @@ class CameraFeedRpi:
 
     def display_live_feed(self, stop_event: Event, render_delay: float = 0.1, use_plt=True):
         """ Opens a window with live video using `libcamera`. """
-        print(f"Starting live video. Press 'q' to quit.")
+        print(f"[CAMERA] Starting live video. Press 'q' to quit.")
         try:
             #self.picam2.start_preview()
             while not stop_event.is_set():
@@ -77,20 +87,19 @@ class CameraFeedRpi:
                 plt.title(self.window_name)
                 plt.pause(0.001)
                 time.sleep(render_delay)
-                # if plt.waitforbuttonpress(0.01):  # Allows quitting by pressing any key
-                #     stop_event.set()
         except KeyboardInterrupt:
-            print("KeyboardInterrupt detected. Stopping live feed.")
-            stop_event.set()
+            print("[CAMERA] KeyboardInterrupt detected. Stopping live feed...")
+            self.cleanup(stop_event)
+            raise KeyboardInterrupt
         except Exception as e:
-            print(f"Error in live feed: {e}")
+            print(f"[CAMERA] Error in live feed: {e}")
+            self.cleanup(stop_event)
             raise e
-        finally:
-            #self.picam2.stop_preview()
-            self._close_feed()
-            plt.close()
+        # finally:
+        #     self.cleanup(stop_event)
 
-    def convert_frame_to_bytes(self, frame: np.ndarray) -> bytes:
+    @staticmethod
+    def convert_frame_to_bytes(frame: np.ndarray) -> bytes:
         """ Convert the frame to a format suitable for desktop transmission. """
         try:
             from PIL import Image

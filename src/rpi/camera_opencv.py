@@ -47,14 +47,22 @@ class CameraFeedOpenCV:
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         """ Close the video capture context manager """
-        self._close_feed()
+        self.cleanup()
 
     def _close_feed(self):
         """ release the video capture and close all windows when context manager exits """
         if self.capture:
             self.capture.release()
             self.capture = None
+
+    def cleanup(self, stop_event: Event = None):
+        """ Cleanup the camera feed, destroy all windows, set stop event, etc. """
+        if stop_event:
+            stop_event.set()
+        # NOTE: tested both and they don't seem to throw any errors when the window is handled by the other library
         cv2.destroyAllWindows()
+        plt.close()
+        self._close_feed()
 
     def set_resize_dims(self, resize_dims: Optional[Tuple[int, int]] = None):
         """ Get initial frame dimensions from the camera to set the resize dimensions """
@@ -68,6 +76,7 @@ class CameraFeedOpenCV:
         if not ret:
             if self.consecutive_failures > 5:
                 print("[CAMERA] Too many consecutive failures. Exiting...")
+                self.cleanup()
                 raise RuntimeError("Too many consecutive failures to capture frames.")
             print("[CAMERA] Failed to capture frame from camera. Skipping...")
             self.consecutive_failures += 1
@@ -102,7 +111,7 @@ class CameraFeedOpenCV:
 
     def _display_live_feed_opencv(self, stop_event: Event, render_delay: int = 0.1):
         """ Opens a window with live video. """
-        print(f"Starting live video. Press 'q' to quit.")
+        print(f"[CAMERA] Starting live video. Press 'q' to quit.")
         try:
             while not stop_event.is_set():
                 frame = self._capture_frame()
@@ -110,16 +119,18 @@ class CameraFeedOpenCV:
                 cv2.waitKey(1) # 1 millisecond delay to allow for window events
                 time.sleep(render_delay)
         except KeyboardInterrupt:
-            print("KeyboardInterrupt detected. Stopping live feed.")
-            stop_event.set()
+            print("[CAMERA] KeyboardInterrupt detected. Stopping live feed...")
+            self.cleanup(stop_event)
+            raise KeyboardInterrupt
         except Exception as e:
-            print(f"Error in live feed: {e}")
+            print(f"[CAMERA] Error in live feed: {e}")
+            self.cleanup(stop_event)
             raise e
-        finally:
-            self._close_feed()
+        # finally:
+        #     self.cleanup(stop_event)
 
     def _display_live_feed_plt(self, stop_event: Event, render_delay: int = 0.1):
-        print(f"Starting live video feed (matplotlib). Press 'q' to quit.")
+        print(f"[CAMERA] Starting live video feed (matplotlib). Press 'q' to quit.")
         # Create matplotlib figure
         fig, ax = plt.subplots()
         frame = self.capture_frame()
@@ -132,20 +143,22 @@ class CameraFeedOpenCV:
                         continue
                     img_display.set_data(frame)  # Update frame data
                     plt.draw()
-                    plt.pause(render_delay)  # Allow GUI events to process
+                    plt.pause(0.001)  # Allow GUI events to process
+                    time.sleep(render_delay)
             except KeyboardInterrupt:
-                print("KeyboardInterrupt detected. Stopping live feed.")
-                stop_event.set()
+                print("[CAMERA] KeyboardInterrupt detected. Stopping live feed.")
+                self.cleanup(stop_event)
+                raise KeyboardInterrupt
             except Exception as e:
-                print(f"Error in live feed: {e}")
+                print(f"[CAMERA] Error in live feed: {e}")
+                self.cleanup(stop_event)
                 raise e
-            finally:
-                self._close_feed()
-        #plt.ioff()  # Turn off interactive mode
-        plt.close(fig)
+            # finally:
+            #     self.cleanup(stop_event)
 
 
-    def convert_frame_to_bytes(self, frame: np.ndarray) -> bytes:
+    @staticmethod
+    def convert_frame_to_bytes(frame: np.ndarray) -> bytes:
         """ Convert the frame to a format suitable for desktop transmission """
         # TODO: add resizing logic later
         _, encoded_frame = cv2.imencode('.jpg', frame)
