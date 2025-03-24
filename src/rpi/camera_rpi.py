@@ -37,7 +37,8 @@ class CameraFeedRpi:
 
     def __enter__(self):
         """ Initialize the camera on context manager entry. """
-        self.picam2 = Picamera2()
+        tuning = Picamera2.load_tuning_file("imx219.json")  # Load the tuning file for the camera
+        self.picam2 = Picamera2(tuning=tuning)  # Create a Picamera2 instance with the tuning file
         config = self.picam2.create_preview_configuration(main={"size": (640, 480), "format": "RGB888"})
         self.picam2.configure(config)
         self.picam2.start()
@@ -85,14 +86,16 @@ class CameraFeedRpi:
                     continue
                 plt.imshow(frame)
                 plt.title(self.window_name)
-                plt.pause(0.001)
+                plt.pause(0.1)
                 time.sleep(render_delay)
         except KeyboardInterrupt:
             print("[CAMERA] KeyboardInterrupt detected. Stopping live feed...")
+            stop_event.set()
             self.cleanup(stop_event)
             raise KeyboardInterrupt
         except Exception as e:
             print(f"[CAMERA] Error in live feed: {e}")
+            stop_event.set()
             self.cleanup(stop_event)
             raise e
         # finally:

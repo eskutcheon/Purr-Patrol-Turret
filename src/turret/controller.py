@@ -58,6 +58,7 @@ class TurretController:
 
     def enter_interactive_mode(self, show_video: bool = False):
         """ launch the turret in interactive mode, with an optional live video feed and WASD controls """
+        print(f"[TURRET] Entering interactive mode. Please wait for instructions...")
         if not show_video:
             # NOTE: setting state without `trigger_action` will use the default trigger action of firing
             self.set_state(InteractiveState()) # stick with default trigger action of firing

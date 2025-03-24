@@ -40,7 +40,8 @@ class MotorHatInterface:
         """ Initialize the motor hat interface. """
         from adafruit_motorkit import MotorKit
         import board
-        self.motor_kit = MotorKit(i2c = board.I2C())
+        # TODO: need to experiment with setting the motorkit frequency and trying PWM modulation
+        self.motor_kit = MotorKit(i2c = board.I2C(), steppers_microsteps=2)
         self.pan_motor = StepperMotor(self._get_stepper_motor(1), 1)
         self.tilt_motor = StepperMotor(self._get_stepper_motor(2), 2)
 
@@ -60,12 +61,16 @@ class MotorHatInterface:
 
 @dataclass
 class StepperMotor:
-    """ Data class for a stepper motor with a motor kit and stepper motor object
+    """ Data class for a stepper motor with a motor kit and stepper motor object\n
         Docs: https://docs.circuitpython.org/projects/motor/en/latest/api.html#adafruit_motor.stepper.StepperMotor
     """
     motor: stepper.StepperMotor
     channel: int
     directions: Dict[int, int] = field(default_factory = lambda: {1: stepper.FORWARD, -1: stepper.BACKWARD})
+
+    def __post_init__(self):
+        #self.motor.release()
+        print("adafruit_motor.stepper.StepperMotor: ", vars(self.motor))
 
     def step(self, steps: int, direction: Literal[1, -1]):
         """ step the motor a number of (half) steps in a direction and style """
@@ -74,7 +79,7 @@ class StepperMotor:
         except KeyError:
             raise ValueError(f"Invalid direction: {direction}. Must be one of {list(self.directions.keys())}")
         for _ in range(steps):
-            self.motor.onestep(direction=step_direction, style=stepper.INTERLEAVE)
+            self.motor.onestep(direction=step_direction, style=stepper.DOUBLE) #style=stepper.INTERLEAVE)
             time.sleep(0.01)  # Add a small delay to allow the motor to move smoothly
 
 

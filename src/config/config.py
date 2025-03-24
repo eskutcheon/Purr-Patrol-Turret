@@ -8,7 +8,7 @@ DEGREES_PER_STEP = 1.8
 INTERACTIVE_STEP_MULT = 2
 MAX_FIRE_DURATION = 3  # in seconds
 # TODO: make this a length 4 tuple (xmin, ymin, xmax, ymax) for different axis limits
-ROTATION_RANGE = (-60, 60)
+ROTATION_RANGE = (-45, 45)
 
 
 # hardware config settings:

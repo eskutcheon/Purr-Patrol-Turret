@@ -120,10 +120,12 @@ class CameraFeedOpenCV:
                 time.sleep(render_delay)
         except KeyboardInterrupt:
             print("[CAMERA] KeyboardInterrupt detected. Stopping live feed...")
+            stop_event.set()
             self.cleanup(stop_event)
             raise KeyboardInterrupt
         except Exception as e:
             print(f"[CAMERA] Error in live feed: {e}")
+            stop_event.set()
             self.cleanup(stop_event)
             raise e
         # finally:
